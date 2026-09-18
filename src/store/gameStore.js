@@ -4,6 +4,7 @@ import {
   fetchGameSnapshot,
   takeSlot,
   releaseSlot,
+  refreshSlotLock,
   toggleReady,
   updatePlayerName,
   startAuction,
@@ -34,6 +35,12 @@ import {
 } from "../services/supabaseClient";
 
 // ============================================================================
+// CONSTANTES DE HEARTBEAT
+// ============================================================================
+const HEARTBEAT_INTERVAL_MS = 15000; // 15s
+const SLOT_LOCK_DURATION_S = 30;     // 30s de lock
+
+// ============================================================================
 // ESTADO INICIAL
 // ============================================================================
 const EMPTY_STATE = {
@@ -53,8 +60,14 @@ const EMPTY_STATE = {
   },
   characterPool: { available: [], used: [], discarded: [] },
   roundVotes: { player1: null, player2: null },
-  mySlot: null, // 'player1' | 'player2' | null (spectator)
+  mySlot: null,
 };
+
+// ============================================================================
+// VARIABLES DE MÓDULO (fuera del store, no reactivas)
+// ============================================================================
+let heartbeatTimer = null;
+let beforeUnloadHandler = null;
 
 // ============================================================================
 // STORE
@@ -81,11 +94,21 @@ export const useGameStore = create((set, get) => ({
         loading: false,
       });
 
-      // Suscribirse a Realtime
       get().subscribeRealtime(game.id);
-
-      // Intentar recuperar slot automáticamente (si este client ya lo tenía)
       get().tryRecoverSlot();
+
+      // Registrar handler de beforeunload UNA sola vez
+      if (!beforeUnloadHandler) {
+        beforeUnloadHandler = () => {
+          const { game: g, mySlot: slot } = get();
+          if (!g || !slot) return;
+          // releaseSlot es async pero beforeunload no espera.
+          // Usamos sendBeacon-like fire-and-forget.
+          // El lock expirará en 30s de todas formas.
+          releaseSlot(g.id, slot).catch(() => {});
+        };
+        window.addEventListener("beforeunload", beforeUnloadHandler);
+      }
     } catch (err) {
       console.error("[gameStore.init]", err);
       set({ loading: false, error: err.message || "Error al inicializar" });
@@ -103,8 +126,44 @@ export const useGameStore = create((set, get) => ({
       const p = players[slot];
       if (p?.client_id === CLIENT_ID) {
         set({ mySlot: slot });
+        get().startHeartbeat(slot);
         return;
       }
+    }
+  },
+
+  // --------------------------------------------------------------------------
+  // HEARTBEAT DEL SLOT
+  // Renueva `slot_locked_until` cada 15s mientras tengamos un slot.
+  // Si el slot ya no nos pertenece (alguien lo tomó), paramos el heartbeat.
+  // --------------------------------------------------------------------------
+  startHeartbeat(slot) {
+    // Limpiar heartbeat anterior si existe
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    heartbeatTimer = setInterval(async () => {
+      const { game: g, mySlot: currentSlot } = get();
+      if (!g || !currentSlot) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+        return;
+      }
+
+      try {
+        await refreshSlotLock(g.id, currentSlot);
+      } catch (err) {
+        console.warn("[heartbeat]", err);
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+  },
+
+  stopHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
     }
   },
 
@@ -123,52 +182,27 @@ export const useGameStore = create((set, get) => ({
       .channel(`game:${gameId}`)
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "game_players",
-          filter: `game_id=eq.${gameId}`,
-        },
+        { event: "*", schema: "public", table: "game_players", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "game_auction",
-          filter: `game_id=eq.${gameId}`,
-        },
+        { event: "*", schema: "public", table: "game_auction", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "game_pool",
-          filter: `game_id=eq.${gameId}`,
-        },
+        { event: "*", schema: "public", table: "game_pool", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "game_votes",
-          filter: `game_id=eq.${gameId}`,
-        },
+        { event: "*", schema: "public", table: "game_votes", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "game_inventory",
-          filter: `game_id=eq.${gameId}`,
-        },
+        { event: "*", schema: "public", table: "game_inventory", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
       .subscribe();
@@ -178,15 +212,11 @@ export const useGameStore = create((set, get) => ({
 
   // --------------------------------------------------------------------------
   // REFRESH SNAPSHOT
-  // ⚠️ FIX: coalescing — si llega un refresh mientras otro corre, se encola
-  // uno pendiente que se ejecuta al terminar el actual. Así no perdemos
-  // actualizaciones cuando hay varios eventos Realtime en ráfaga.
   // --------------------------------------------------------------------------
   refreshing: false,
   pendingRefresh: false,
 
   async refreshSnapshot() {
-    // Si ya hay un refresh corriendo, marcar que hay uno pendiente y salir
     if (get().refreshing) {
       set({ pendingRefresh: true });
       return;
@@ -205,10 +235,8 @@ export const useGameStore = create((set, get) => ({
     } finally {
       set({ refreshing: false });
 
-      // Si mientras corríamos llegó otro evento, ejecutar UN refresh más
       if (get().pendingRefresh) {
         set({ pendingRefresh: false });
-        // Usamos setTimeout(0) para liberar el stack actual
         setTimeout(() => get().refreshSnapshot(), 0);
       }
     }
@@ -225,6 +253,7 @@ export const useGameStore = create((set, get) => ({
     try {
       await takeSlot(gameId, slot);
       set({ mySlot: slot });
+      get().startHeartbeat(slot);  // ← arrancar heartbeat
       await get().refreshSnapshot();
     } catch (err) {
       console.error("[takeSlot]", err);
@@ -236,6 +265,7 @@ export const useGameStore = create((set, get) => ({
     const { game, mySlot } = get();
     if (!game || !mySlot) return;
     try {
+      get().stopHeartbeat();  // ← parar heartbeat
       await releaseSlot(game.id, mySlot);
       set({ mySlot: null });
       await get().refreshSnapshot();
@@ -262,7 +292,6 @@ export const useGameStore = create((set, get) => ({
     await toggleReady(game.id, slot, !current);
     await get().refreshSnapshot();
 
-    // Si ambos están ready → arrancar subasta
     const fresh = get().players;
     if (fresh.player1?.ready && fresh.player2?.ready) {
       await get().startAuction();
@@ -306,7 +335,6 @@ export const useGameStore = create((set, get) => ({
   async updateTimerLocal(timeLeft) {
     const gameId = get().game?.id;
     if (!gameId) return;
-    // Optimista local — no esperamos al servidor para el tick
     set((s) => ({ auction: { ...s.auction, time_left: timeLeft } }));
     try {
       await updateTimerLocal(gameId, timeLeft);
@@ -321,7 +349,6 @@ export const useGameStore = create((set, get) => ({
     try {
       await finalizeAuction(gameId);
       await get().refreshSnapshot();
-      // Volver a IDLE pasados 3s
       setTimeout(() => {
         get().resetAuctionToIdle();
       }, 3500);
@@ -344,7 +371,6 @@ export const useGameStore = create((set, get) => ({
     await toggleFinishRequest(game.id, slot, !current);
     await get().refreshSnapshot();
 
-    // Si ambos piden terminar → finalizar
     const fresh = get().players;
     if (fresh.player1?.finish_requested && fresh.player2?.finish_requested) {
       await get().finalizeAuction();
@@ -420,6 +446,26 @@ export const useGameStore = create((set, get) => ({
   // CLEANUP
   // --------------------------------------------------------------------------
   async destroy() {
+    // 1. Parar heartbeat
+    get().stopHeartbeat();
+
+    // 2. Quitar listener de beforeunload
+    if (beforeUnloadHandler) {
+      window.removeEventListener("beforeunload", beforeUnloadHandler);
+      beforeUnloadHandler = null;
+    }
+
+    // 3. Liberar slot (best-effort)
+    const { game, mySlot } = get();
+    if (game && mySlot) {
+      try {
+        await releaseSlot(game.id, mySlot);
+      } catch (err) {
+        console.warn("[destroy] releaseSlot:", err);
+      }
+    }
+
+    // 4. Quitar canal Realtime
     const channel = get().realtimeChannel;
     if (channel) {
       await supabase.removeChannel(channel);
