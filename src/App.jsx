@@ -45,6 +45,7 @@ export default function App() {
     init,
     destroy,
     takeSlot,
+    becomeSpectator,
     updatePlayerName,
     toggleReady,
     markAuctionBidding,
@@ -166,6 +167,11 @@ export default function App() {
     );
   }, "No se pudo tomar el slot");
 
+  const handleBecomeSpectator = withToast(async () => {
+    await becomeSpectator();
+    showToast("MODO ESPECTADOR", "Has liberado tu slot", "info", 2000);
+  }, "No se pudo liberar el slot");
+
   const handleBid = withToast(async (slot, amount) => {
     await placeBid(slot, amount);
     showToast("¡NUEVA PUJA!", `${amount} monedas`, "trophy", 2000);
@@ -208,9 +214,9 @@ export default function App() {
       <FloatingToast toast={toast} />
 
       <Header
-        userRole={mySlot || "spectator"}
         mySlot={mySlot}
         onTakeSlot={handleTakeSlot}
+        onBecomeSpectator={handleBecomeSpectator}
         players={players}
         connectedUsersCount={users.length || 1}
         onOpenConnectedModal={openConnectedModal}
