@@ -26,6 +26,8 @@ export default function AuctionZone({
 }) {
   // ==========================================================================
   // NORMALIZACIÓN DE PROPS
+  // Leemos de auctionState SIN destructuring con defaults engañosos.
+  // Un `default = false` en destructuring sobreescribe el `??`.
   // ==========================================================================
   const {
     status = "IDLE",
@@ -40,8 +42,8 @@ export default function AuctionZone({
     highestBidder = null,
     time_left = 20,
     timeLeft = 20,
-    timer_running = false,
-    timerRunning = false,
+    timer_running,
+    timerRunning,
   } = auctionState || {};
 
   const character = current_character || currentCharacter;
@@ -49,28 +51,23 @@ export default function AuctionZone({
   const minAccept = minAcceptancePrice || min_price;
   const bid = currentBid || current_bid;
   const leader = highestBidder || highest_bidder_slot;
-  const running = timerRunning ?? timer_running;
 
-  // ==========================================================================
-  // LOG 1: en cada render
-  // ==========================================================================
-  console.log("[AuctionZone RENDER]", {
-    status,
-    running,
-    time_left,
-    timeLeft,
-    characterId,
-  });
+  // ✅ FIX: usamos || en vez de ?? porque los defaults del destructuring
+  // ya rellenan las variables. Si alguno es true, running debe ser true.
+  const running = timer_running === true || timerRunning === true;
 
   // ==========================================================================
   // TIMER LOCAL
   // ==========================================================================
-  const [localTime, setLocalTime] = useState(timeLeft ?? time_left ?? 20);
+  const [localTime, setLocalTime] = useState(
+    (typeof timeLeft === "number" ? timeLeft : time_left) ?? 20
+  );
   const timeRef = useRef(localTime);
   timeRef.current = localTime;
 
   // ==========================================================================
   // SINCRONIZAR TIMER LOCAL CON LA PROP
+  // Solo cuando arranca una subasta nueva (transición a BIDDING+running).
   // ==========================================================================
   const prevStatusRef = useRef(status);
   useEffect(() => {
@@ -78,7 +75,9 @@ export default function AuctionZone({
     prevStatusRef.current = status;
 
     if (status === "BIDDING" && running && prev !== "BIDDING") {
-      setLocalTime(timeLeft ?? time_left ?? 20);
+      const initialTime =
+        typeof timeLeft === "number" ? timeLeft : time_left || 20;
+      setLocalTime(initialTime);
     }
     if (status === "IDLE") {
       setLocalTime(settings?.auctionTime || 20);
@@ -92,13 +91,6 @@ export default function AuctionZone({
   const intervalRef = useRef(null);
 
   useEffect(() => {
-    // LOG 2: cuando corre el effect
-    console.log("[AuctionZone EFFECT interval]", {
-      status,
-      running,
-      localTime,
-    });
-
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -108,9 +100,6 @@ export default function AuctionZone({
 
     intervalRef.current = setInterval(() => {
       const current = timeRef.current;
-
-      // LOG 3: cada tick del intervalo
-      console.log("[TICK]", current);
 
       if (current > 1) {
         sounds.playTimerTick(current <= 6);
