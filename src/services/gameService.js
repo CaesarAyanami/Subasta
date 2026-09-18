@@ -50,7 +50,12 @@ export async function fetchGameSnapshot(gameId) {
   const [gameRes, playersRes, auctionRes, poolRes, inventoryRes, votesRes] = await Promise.all([
     supabase.from("games").select("*").eq("id", gameId).maybeSingle(),
     supabase.from("game_players").select("*").eq("game_id", gameId).order("slot"),
-    supabase.from("game_auction").select("*").eq("game_id", gameId).maybeSingle(),
+    // ⚠️ FIX: JOIN con characters para traer el objeto completo de la subasta
+    supabase
+      .from("game_auction")
+      .select("*, current_character:characters!game_auction_current_character_id_fkey(*)")
+      .eq("game_id", gameId)
+      .maybeSingle(),
     supabase.from("game_pool").select("*, character:characters(*)").eq("game_id", gameId),
     supabase.from("game_inventory").select("*, character:characters(*)").eq("game_id", gameId).order("won_at"),
     supabase.from("game_votes").select("*").eq("game_id", gameId),
