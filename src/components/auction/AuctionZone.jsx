@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Clock,
   Trophy,
@@ -52,28 +52,34 @@ export default function AuctionZone({
   const running = timerRunning ?? timer_running;
 
   // ==========================================================================
-  // TIMER LOCAL
-  // El timer vive SOLO en el cliente. No se persiste en BD en cada tick.
-  // Persistir cada segundo causa race conditions con refreshSnapshot
-  // (el timer sube y baja constantemente).
+  // LOG 1: en cada render
   // ==========================================================================
-  const [localTime, setLocalTime] = React.useState(timeLeft ?? time_left ?? 20);
+  console.log("[AuctionZone RENDER]", {
+    status,
+    running,
+    time_left,
+    timeLeft,
+    characterId,
+  });
+
+  // ==========================================================================
+  // TIMER LOCAL
+  // ==========================================================================
+  const [localTime, setLocalTime] = useState(timeLeft ?? time_left ?? 20);
   const timeRef = useRef(localTime);
   timeRef.current = localTime;
 
-  // Sincronizar el timer local con la prop SOLO cuando arranca una subasta nueva
-  // (es decir, cuando pasamos a BIDDING con running=true desde un estado distinto)
+  // ==========================================================================
+  // SINCRONIZAR TIMER LOCAL CON LA PROP
+  // ==========================================================================
   const prevStatusRef = useRef(status);
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status;
 
-    // Cuando arranca la subasta (cambio a BIDDING con running activo)
     if (status === "BIDDING" && running && prev !== "BIDDING") {
-      // Tomar el valor actual de la prop como base
       setLocalTime(timeLeft ?? time_left ?? 20);
     }
-    // Cuando se resetea a IDLE, resetear timer local
     if (status === "IDLE") {
       setLocalTime(settings?.auctionTime || 20);
     }
@@ -82,13 +88,17 @@ export default function AuctionZone({
 
   // ==========================================================================
   // INTERVALO DEL CRONÓMETRO
-  // Un solo interval, que se monta cuando BIDDING+running, y no se re-crea
-  // en cada tick. Lee el tiempo actual desde timeRef.
   // ==========================================================================
   const intervalRef = useRef(null);
 
   useEffect(() => {
-    // Limpiar interval previo
+    // LOG 2: cuando corre el effect
+    console.log("[AuctionZone EFFECT interval]", {
+      status,
+      running,
+      localTime,
+    });
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -99,17 +109,13 @@ export default function AuctionZone({
     intervalRef.current = setInterval(() => {
       const current = timeRef.current;
 
+      // LOG 3: cada tick del intervalo
+      console.log("[TICK]", current);
+
       if (current > 1) {
         sounds.playTimerTick(current <= 6);
-        const next = current - 1;
-        setLocalTime(next);
-
-        // Notificar al padre SOLO localmente (no persistir en BD)
-        // onTimerTick se usa aquí solo como hook para quien lo necesite.
-        // En la práctica ya no persistimos.
-        // (Si en algún momento se quiere persistir, solo hacerlo cada 5s)
+        setLocalTime(current - 1);
       } else {
-        // Llegó a 0 → expirar
         clearInterval(intervalRef.current);
         intervalRef.current = null;
         setLocalTime(0);
