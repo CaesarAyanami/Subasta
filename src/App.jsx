@@ -85,6 +85,7 @@ export default function App() {
     init: initPresence,
     updatePresence,
     destroy: destroyPresence,
+    setGameId,
   } = usePresenceStore();
 
   const canAdvanceRound = useGameStore(selectCanAdvanceRound);
@@ -105,6 +106,17 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // --------------------------------------------------------------------------
+  // SINCRONIZAR gameId CON presenceStore
+  // Necesario para que presenceStore pueda liberar slots cuando un cliente
+  // se desconecta (necesita saber a qué partida pertenece el slot).
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (game?.id) {
+      setGameId(game.id);
+    }
+  }, [game?.id, setGameId]);
 
   // --------------------------------------------------------------------------
   // URL NAVIGATION
