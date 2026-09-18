@@ -50,7 +50,6 @@ export async function fetchGameSnapshot(gameId) {
   const [gameRes, playersRes, auctionRes, poolRes, inventoryRes, votesRes] = await Promise.all([
     supabase.from("games").select("*").eq("id", gameId).maybeSingle(),
     supabase.from("game_players").select("*").eq("game_id", gameId).order("slot"),
-    // ⚠️ FIX: JOIN con characters para traer el objeto completo de la subasta
     supabase
       .from("game_auction")
       .select("*, current_character:characters!game_auction_current_character_id_fkey(*)")
@@ -68,20 +67,21 @@ export async function fetchGameSnapshot(gameId) {
   const inventory = unwrap(inventoryRes) || [];
   const votes = unwrap(votesRes) || [];
 
-  // Separar pool por estado
   const available = pool.filter((p) => p.state === "available").map((p) => p.character);
   const used = pool.filter((p) => p.state === "used").map((p) => p.character);
   const discarded = pool.filter((p) => p.state === "discarded").map((p) => p.character);
 
-  // Inventario por jugador
   const inventoryBySlot = { player1: [], player2: [] };
   for (const inv of inventory) {
     if (inventoryBySlot[inv.player_slot]) {
-      inventoryBySlot[inv.player_slot].push({ ...inv.character, winningBid: inv.winning_bid, wonAt: inv.won_at });
+      inventoryBySlot[inv.player_slot].push({
+        ...inv.character,
+        winningBid: inv.winning_bid,
+        wonAt: inv.won_at,
+      });
     }
   }
 
-  // Jugadores en formato {player1, player2}
   const playersMap = { player1: null, player2: null };
   for (const p of players) {
     playersMap[p.slot] = {
@@ -90,7 +90,6 @@ export async function fetchGameSnapshot(gameId) {
     };
   }
 
-  // Votos en formato {player1, player2}
   const votesMap = { player1: null, player2: null };
   for (const v of votes) {
     votesMap[v.player_slot] = v.action;
@@ -107,7 +106,7 @@ export async function fetchGameSnapshot(gameId) {
 }
 
 // ============================================================================
-// SLOTS: tomar / liberar
+// SLOTS: tomar / liberar / renovar
 // ============================================================================
 export async function takeSlot(gameId, slot) {
   const data = unwrap(
@@ -123,6 +122,23 @@ export async function takeSlot(gameId, slot) {
 export async function releaseSlot(gameId, slot) {
   unwrap(
     await supabase.rpc("release_slot", {
+      p_game_id: gameId,
+      p_slot: slot,
+      p_client_id: CLIENT_ID,
+    })
+  );
+}
+
+// ============================================================================
+// NUEVO: Renovar el lock del slot (heartbeat)
+// Llama a la RPC `refresh_slot_lock` que actualiza `slot_locked_until` a
+// now() + 30s, SOLO si el slot sigue perteneciendo a este CLIENT_ID.
+// Si el slot fue reclamado por otro cliente mientras tanto, esta función
+// no hace nada (0 rows).
+// ============================================================================
+export async function refreshSlotLock(gameId, slot) {
+  unwrap(
+    await supabase.rpc("refresh_slot_lock", {
       p_game_id: gameId,
       p_slot: slot,
       p_client_id: CLIENT_ID,
@@ -212,7 +228,7 @@ export async function resetAuctionToIdle(gameId) {
 }
 
 // ============================================================================
-// FINISH REQUEST (acuerdo mutuo para terminar la subasta)
+// FINISH REQUEST
 // ============================================================================
 export async function toggleFinishRequest(gameId, slot, requested) {
   unwrap(
@@ -235,7 +251,7 @@ export async function castVote(gameId, slot, action) {
       p_action: action,
     })
   );
-  return data; // { both_agree: bool }
+  return data;
 }
 
 export async function cancelVote(gameId, slot) {
