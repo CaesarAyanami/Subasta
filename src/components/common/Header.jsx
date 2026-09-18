@@ -10,12 +10,14 @@ import {
   ScrollText,
   ChevronDown,
   Lock,
+  LogOut,
 } from "lucide-react";
 import sounds from "../../services/soundEffects";
 
 export default function Header({
   mySlot = null,
   onTakeSlot,
+  onBecomeSpectator,
   players,
   connectedUsersCount = 1,
   onOpenConnectedModal,
@@ -74,11 +76,20 @@ export default function Header({
     ? "Jugador 2"
     : "Espectador";
 
+  // Elegir rol (tomar slot o cambiar)
   const handleSelectRole = (slot) => {
     setRoleMenuOpen(false);
+    if (slot === mySlot) return; // mismo rol, no hacer nada
     sounds.playClick();
-    if (slot === mySlot) return;
     onTakeSlot && onTakeSlot(slot);
+  };
+
+  // Volver a espectador (liberar slot)
+  const handleBecomeSpectator = () => {
+    setRoleMenuOpen(false);
+    if (isSpectator) return; // ya eres espectador
+    sounds.playClick();
+    onBecomeSpectator && onBecomeSpectator();
   };
 
   return (
@@ -249,16 +260,26 @@ export default function Header({
                   onClick={() => handleSelectRole("player2")}
                 />
 
-                {/* Espectador */}
+                {/* Espectador — siempre clickeable si NO eres espectador */}
                 <RoleOption
                   id="role-opt-spectator"
-                  icon={<Eye className="w-3.5 h-3.5" />}
-                  title="Espectador"
+                  icon={
+                    isSpectator ? (
+                      <Eye className="w-3.5 h-3.5" />
+                    ) : (
+                      <LogOut className="w-3.5 h-3.5" />
+                    )
+                  }
+                  title={isSpectator ? "Espectador" : "Volver a Espectador"}
                   color="slate"
-                  subtitle={isSpectator ? "Modo actual" : "Solo ver"}
-                  disabled={isSpectator}
+                  subtitle={
+                    isSpectator
+                      ? "Modo actual"
+                      : "Liberar tu slot y salir"
+                  }
+                  disabled={false}
                   active={isSpectator}
-                  onClick={() => setRoleMenuOpen(false)}
+                  onClick={handleBecomeSpectator}
                 />
               </div>
             )}
@@ -324,7 +345,9 @@ function RoleOption({ id, icon, title, subtitle, disabled, active, onClick, colo
       className={`w-full px-3 py-2 flex items-center gap-2.5 text-left border-l-4 ${palette.border} ${palette.bg} transition disabled:opacity-40 disabled:cursor-not-allowed border-b border-slate-800 last:border-b-0`}
     >
       <span
-        className={disabled ? "text-slate-600" : active ? palette.iconActive : palette.iconIdle}
+        className={
+          disabled ? "text-slate-600" : active ? palette.iconActive : palette.iconIdle
+        }
         aria-hidden="true"
       >
         {disabled ? <Lock className="w-3.5 h-3.5" /> : icon}
