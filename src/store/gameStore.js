@@ -93,7 +93,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   // --------------------------------------------------------------------------
-  // RECUPERAR SLOT (si el cliente ya lo tenía reservado en BD)
+  // RECUPERAR SLOT
   // --------------------------------------------------------------------------
   async tryRecoverSlot() {
     const { game, players } = get();
@@ -114,7 +114,6 @@ export const useGameStore = create((set, get) => ({
   realtimeChannel: null,
 
   subscribeRealtime(gameId) {
-    // Evitar doble suscripción
     const existing = get().realtimeChannel;
     if (existing) {
       supabase.removeChannel(existing);
@@ -178,24 +177,40 @@ export const useGameStore = create((set, get) => ({
   },
 
   // --------------------------------------------------------------------------
-  // REFRESH SNAPSHOT (llamado por realtime)
+  // REFRESH SNAPSHOT
+  // ⚠️ FIX: coalescing — si llega un refresh mientras otro corre, se encola
+  // uno pendiente que se ejecuta al terminar el actual. Así no perdemos
+  // actualizaciones cuando hay varios eventos Realtime en ráfaga.
   // --------------------------------------------------------------------------
   refreshing: false,
+  pendingRefresh: false,
 
   async refreshSnapshot() {
-    // Evitar solapamiento de refreshes
-    if (get().refreshing) return;
-    set({ refreshing: true });
+    // Si ya hay un refresh corriendo, marcar que hay uno pendiente y salir
+    if (get().refreshing) {
+      set({ pendingRefresh: true });
+      return;
+    }
+
+    set({ refreshing: true, pendingRefresh: false });
 
     try {
       const gameId = get().game?.id;
-      if (!gameId) return;
-      const snapshot = await fetchGameSnapshot(gameId);
-      set({ ...snapshot });
+      if (gameId) {
+        const snapshot = await fetchGameSnapshot(gameId);
+        set({ ...snapshot });
+      }
     } catch (err) {
       console.warn("[refreshSnapshot]", err);
     } finally {
       set({ refreshing: false });
+
+      // Si mientras corríamos llegó otro evento, ejecutar UN refresh más
+      if (get().pendingRefresh) {
+        set({ pendingRefresh: false });
+        // Usamos setTimeout(0) para liberar el stack actual
+        setTimeout(() => get().refreshSnapshot(), 0);
+      }
     }
   },
 
@@ -344,7 +359,7 @@ export const useGameStore = create((set, get) => ({
     if (!gameId) return;
     const result = await castVote(gameId, slot, action);
     await get().refreshSnapshot();
-    return result; // { both_agree }
+    return result;
   },
 
   async cancelVote(slot) {
