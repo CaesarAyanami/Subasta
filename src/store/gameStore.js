@@ -37,8 +37,7 @@ import {
 // ============================================================================
 // CONSTANTES DE HEARTBEAT
 // ============================================================================
-const HEARTBEAT_INTERVAL_MS = 15000; // 15s
-const SLOT_LOCK_DURATION_S = 30;     // 30s de lock
+const HEARTBEAT_INTERVAL_MS = 15000;
 
 // ============================================================================
 // ESTADO INICIAL
@@ -64,7 +63,7 @@ const EMPTY_STATE = {
 };
 
 // ============================================================================
-// VARIABLES DE MÓDULO (fuera del store, no reactivas)
+// VARIABLES DE MÓDULO
 // ============================================================================
 let heartbeatTimer = null;
 let beforeUnloadHandler = null;
@@ -97,14 +96,10 @@ export const useGameStore = create((set, get) => ({
       get().subscribeRealtime(game.id);
       get().tryRecoverSlot();
 
-      // Registrar handler de beforeunload UNA sola vez
       if (!beforeUnloadHandler) {
         beforeUnloadHandler = () => {
           const { game: g, mySlot: slot } = get();
           if (!g || !slot) return;
-          // releaseSlot es async pero beforeunload no espera.
-          // Usamos sendBeacon-like fire-and-forget.
-          // El lock expirará en 30s de todas formas.
           releaseSlot(g.id, slot).catch(() => {});
         };
         window.addEventListener("beforeunload", beforeUnloadHandler);
@@ -133,12 +128,9 @@ export const useGameStore = create((set, get) => ({
   },
 
   // --------------------------------------------------------------------------
-  // HEARTBEAT DEL SLOT
-  // Renueva `slot_locked_until` cada 15s mientras tengamos un slot.
-  // Si el slot ya no nos pertenece (alguien lo tomó), paramos el heartbeat.
+  // HEARTBEAT
   // --------------------------------------------------------------------------
   startHeartbeat(slot) {
-    // Limpiar heartbeat anterior si existe
     if (heartbeatTimer) {
       clearInterval(heartbeatTimer);
       heartbeatTimer = null;
@@ -243,35 +235,61 @@ export const useGameStore = create((set, get) => ({
   },
 
   // --------------------------------------------------------------------------
-  // SLOTS
+  // SLOTS — Tomar / Cambiar / Liberar
   // --------------------------------------------------------------------------
   async takeSlot(slot) {
     const gameId = get().game?.id;
     if (!gameId) return;
-    if (get().mySlot) throw new Error("Ya tienes un slot asignado");
 
+    const currentSlot = get().mySlot;
+
+    // Si ya tienes este slot → no hacer nada
+    if (currentSlot === slot) return;
+
+    // Si ya tienes otro slot → primero liberar el actual
+    if (currentSlot && currentSlot !== slot) {
+      try {
+        get().stopHeartbeat();
+        await releaseSlot(gameId, currentSlot);
+        set({ mySlot: null });
+      } catch (err) {
+        console.warn("[takeSlot] release previous:", err);
+      }
+    }
+
+    // Ahora tomar el nuevo slot
     try {
       await takeSlot(gameId, slot);
       set({ mySlot: slot });
-      get().startHeartbeat(slot);  // ← arrancar heartbeat
+      get().startHeartbeat(slot);
       await get().refreshSnapshot();
     } catch (err) {
       console.error("[takeSlot]", err);
+      // Si falló, refrescar para que la UI refleje el estado real
+      await get().refreshSnapshot();
       throw err;
     }
   },
 
-  async releaseMySlot() {
+  // Volver a espectador (liberar slot sin tomar otro)
+  async becomeSpectator() {
     const { game, mySlot } = get();
     if (!game || !mySlot) return;
+
     try {
-      get().stopHeartbeat();  // ← parar heartbeat
+      get().stopHeartbeat();
       await releaseSlot(game.id, mySlot);
       set({ mySlot: null });
       await get().refreshSnapshot();
     } catch (err) {
-      console.warn("[releaseMySlot]", err);
+      console.warn("[becomeSpectator]", err);
+      throw err;
     }
+  },
+
+  // Alias retrocompatible
+  async releaseMySlot() {
+    return get().becomeSpectator();
   },
 
   // --------------------------------------------------------------------------
@@ -446,16 +464,13 @@ export const useGameStore = create((set, get) => ({
   // CLEANUP
   // --------------------------------------------------------------------------
   async destroy() {
-    // 1. Parar heartbeat
     get().stopHeartbeat();
 
-    // 2. Quitar listener de beforeunload
     if (beforeUnloadHandler) {
       window.removeEventListener("beforeunload", beforeUnloadHandler);
       beforeUnloadHandler = null;
     }
 
-    // 3. Liberar slot (best-effort)
     const { game, mySlot } = get();
     if (game && mySlot) {
       try {
@@ -465,7 +480,6 @@ export const useGameStore = create((set, get) => ({
       }
     }
 
-    // 4. Quitar canal Realtime
     const channel = get().realtimeChannel;
     if (channel) {
       await supabase.removeChannel(channel);
