@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Sparkles, Zap, Flame, Crown } from "lucide-react";
-import CharacterCard, { RARITY_CONFIG } from "./CharacterCard";
+import { Sparkles, Zap, Crown } from "lucide-react";
+import CharacterCard from "./CharacterCard";
 import sounds from "../../services/soundEffects";
 
 export default function RouletteDisplay({
@@ -13,41 +13,30 @@ export default function RouletteDisplay({
   const [displayIndex, setDisplayIndex] = useState(0);
   const [currentRarityColor, setCurrentRarityColor] = useState("text-yellow-400");
 
+  // Refs de timers
   const timerRef = useRef(null);
   const intervalRef = useRef(null);
   const revealTimeoutRef = useRef(null);
+  const startedRef = useRef(false); // evita doble arranque en StrictMode
 
-  // ⚠️ FIX: congelar pool y targetCharacter al montar.
-  // Si el padre re-renderiza y nos pasa nuevas referencias, NO queremos
-  // reiniciar la animación. Solo la primera vez es válido.
-  const frozenPoolRef = useRef(pool);
-  const frozenTargetRef = useRef(targetCharacter);
-  const animationStartedRef = useRef(false);
+  // Datos derivados
+  const targetId = targetCharacter?.id;
+  const duration = getDurationByRarity(targetCharacter?.rarity);
 
-  // Guardar el pool objetivo la PRIMERA vez que hay datos válidos
-  if (!animationStartedRef.current && pool.length > 0 && targetCharacter) {
-    frozenPoolRef.current = pool;
-    frozenTargetRef.current = targetCharacter;
-  }
-
-  const frozenPool = frozenPoolRef.current;
-  const frozenTarget = frozenTargetRef.current;
-
-  // Calcular duración según rareza del personaje CONGELADO
-  const duration = getDurationByRarity(frozenTarget?.rarity);
-
-  // ⚠️ FIX CRÍTICO: el useEffect depende SOLO del id del personaje objetivo
-  // (string primitivo). Si el padre nos pasa un nuevo objeto con el mismo id,
-  // no se re-ejecuta. Solo se re-ejecuta si cambia el id del personaje.
-  const targetId = frozenTarget?.id;
-
+  // ==========================================================================
+  // ARRANQUE DE LA ANIMACIÓN
+  // ==========================================================================
   useEffect(() => {
-    if (!frozenPool.length || !frozenTarget) return;
-    if (animationStartedRef.current) return; // ya arrancó, no reiniciar
+    // Guard: no arrancar sin datos
+    if (!pool || pool.length === 0) return;
+    if (!targetCharacter) return;
 
-    animationStartedRef.current = true;
+    // Guard: no arrancar dos veces en el mismo montaje (StrictMode)
+    if (startedRef.current) return;
+    startedRef.current = true;
 
     sounds.initContext();
+
     const startTime = Date.now();
     let speed = 60;
 
@@ -63,20 +52,24 @@ export default function RouletteDisplay({
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
+      // Desaceleración cúbica
       if (progress > 0.6) {
         speed = 60 + Math.pow((progress - 0.6) / 0.4, 3) * 350;
       }
 
       sounds.playRouletteTick(1 + (1 - progress));
 
-      setDisplayIndex((prev) => (prev + 1) % frozenPool.length);
+      // Avanzar índice visual
+      setDisplayIndex((prev) => (prev + 1) % pool.length);
       setCurrentRarityColor(colors[Math.floor(Math.random() * colors.length)]);
 
       if (progress < 1) {
         timerRef.current = setTimeout(step, speed);
       } else {
+        // Revelar
         setPhase("revealed");
-        sounds.playGachaReveal(frozenTarget.rarity);
+        sounds.playGachaReveal(targetCharacter.rarity);
+
         revealTimeoutRef.current = setTimeout(() => {
           if (onComplete) onComplete();
         }, 1500);
@@ -85,49 +78,46 @@ export default function RouletteDisplay({
 
     timerRef.current = setTimeout(step, speed);
 
+    // Cleanup
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (revealTimeoutRef.current) clearTimeout(revealTimeoutRef.current);
     };
-    // ⚠️ Dependencias intencionalmente mínimas:
-    // - targetId: si cambia el personaje objetivo, sí queremos reiniciar
-    // - duration: derivada del target, cambia con él
-    // NO incluimos frozenPool ni frozenTarget porque son refs (estables)
+    // ⚠️ Dependencias: solo targetId y duration (valores primitivos).
+    // Gracias al `key={targetId}` en AuctionZone, el componente se remonta
+    // cuando cambia el personaje objetivo. Aquí ya no hacen falta refs
+    // congeladas ni lógica de reset manual.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetId, duration]);
-
-  // Resetear cuando cambia el target (nueva subasta)
-  useEffect(() => {
-    if (!targetId) return;
-    // Si el id cambió respecto al que tenemos congelado, resetear todo
-    if (frozenTargetRef.current?.id !== targetId) {
-      frozenTargetRef.current = targetCharacter;
-      animationStartedRef.current = false;
-      setPhase("spinning");
-      setDisplayIndex(0);
-    }
-  }, [targetId, targetCharacter]);
 
   // ==========================================================================
   // RENDER
   // ==========================================================================
   const activeChar =
     phase === "revealed"
-      ? frozenTarget
-      : frozenPool[displayIndex] || frozenTarget;
+      ? targetCharacter
+      : pool[displayIndex] || targetCharacter;
 
   const isHighRarity =
-    frozenTarget?.rarity === "UR" || frozenTarget?.rarity === "LR";
+    targetCharacter?.rarity === "UR" || targetCharacter?.rarity === "LR";
 
-  // Normalizar imagen (snake_case vs camelCase)
   const activeImageUrl = activeChar?.image_url || activeChar?.imageUrl || "";
+  const targetImageUrl =
+    targetCharacter?.image_url || targetCharacter?.imageUrl || "";
 
   return (
     <div
       className={`relative w-full max-w-md mx-auto p-4 flex flex-col items-center justify-center transition-all ${
         phase === "revealed" && isHighRarity ? "animate-wiggle" : ""
       }`}
+      role="status"
+      aria-live="polite"
+      aria-label={
+        phase === "spinning"
+          ? "Sorteando personaje"
+          : "Personaje seleccionado"
+      }
     >
       {/* Título */}
       <div className="mb-4 text-center">
@@ -148,7 +138,7 @@ export default function RouletteDisplay({
         </div>
         <p className="text-xs font-['Chakra_Petch'] font-semibold text-slate-300">
           {phase === "spinning"
-            ? frozenTarget?.rarity === "LR"
+            ? targetCharacter?.rarity === "LR"
               ? "⚡ ¡ALERTA DE ALTA ENERGÍA DETECTADA! ⚡"
               : "La ruleta arcade está decidiendo..."
             : "¡Prepárense para iniciar las pujas!"}
@@ -174,7 +164,7 @@ export default function RouletteDisplay({
           ) : (
             <div className="w-full animate-[bounce_0.6s_ease-out]">
               <CharacterCard
-                character={frozenTarget}
+                character={targetCharacter}
                 size="large"
                 showMinPriceBadge={false}
               />
@@ -217,7 +207,7 @@ export default function RouletteDisplay({
               </div>
             ) : (
               <CharacterCard
-                character={frozenTarget}
+                character={targetCharacter}
                 size="large"
                 showMinPriceBadge={false}
               />
@@ -282,7 +272,7 @@ export default function RouletteDisplay({
           ) : (
             <div className="animate-[scaleUp_0.5s_cubic-bezier(0.175,0.885,0.32,1.275)]">
               <CharacterCard
-                character={frozenTarget}
+                character={targetCharacter}
                 size="large"
                 showMinPriceBadge={false}
               />
