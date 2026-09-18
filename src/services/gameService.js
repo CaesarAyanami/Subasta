@@ -12,18 +12,15 @@ export async function getOrCreateMainGame() {
 
   if (existing) return existing;
 
-  // Crear partida nueva
   const game = unwrap(
     await supabase.from("games").insert({ status: "lobby" }).select().single()
   );
 
-  // Crear 2 jugadores
   await supabase.from("game_players").insert([
     { game_id: game.id, slot: "player1", name: "Jugador 1", coins: DEFAULT_SETTINGS.initialCoins },
     { game_id: game.id, slot: "player2", name: "Jugador 2", coins: DEFAULT_SETTINGS.initialCoins },
   ]);
 
-  // Añadir todos los personajes al pool
   const { data: chars } = await supabase.from("characters").select("id");
   if (chars?.length) {
     await supabase.from("game_pool").insert(
@@ -31,7 +28,6 @@ export async function getOrCreateMainGame() {
     );
   }
 
-  // Crear subasta inicial
   await supabase.from("game_auction").insert({
     game_id: game.id,
     status: "IDLE",
@@ -130,11 +126,7 @@ export async function releaseSlot(gameId, slot) {
 }
 
 // ============================================================================
-// NUEVO: Renovar el lock del slot (heartbeat)
-// Llama a la RPC `refresh_slot_lock` que actualiza `slot_locked_until` a
-// now() + 30s, SOLO si el slot sigue perteneciendo a este CLIENT_ID.
-// Si el slot fue reclamado por otro cliente mientras tanto, esta función
-// no hace nada (0 rows).
+// Renovar el lock del slot (heartbeat)
 // ============================================================================
 export async function refreshSlotLock(gameId, slot) {
   unwrap(
@@ -143,6 +135,27 @@ export async function refreshSlotLock(gameId, slot) {
       p_slot: slot,
       p_client_id: CLIENT_ID,
     })
+  );
+}
+
+// ============================================================================
+// NUEVO: Liberar slot de OTRO cliente (por desconexión)
+// Se usa cuando el presenceStore detecta que un cliente se desconectó.
+// Libera el slot que ese cliente tenía reservado, sin importar si el lock
+// expiró o no. Hace un UPDATE directo (RLS público lo permite).
+// ============================================================================
+export async function releaseSlotByClient(gameId, clientId) {
+  if (!clientId) return;
+  unwrap(
+    await supabase
+      .from("game_players")
+      .update({
+        client_id: null,
+        slot_locked_until: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("game_id", gameId)
+      .eq("client_id", clientId)
   );
 }
 
