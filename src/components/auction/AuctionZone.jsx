@@ -26,7 +26,6 @@ export default function AuctionZone({
 }) {
   // ==========================================================================
   // NORMALIZACIÓN DE PROPS
-  // Acepta tanto el shape nuevo (snake_case) como el viejo (camelCase).
   // ==========================================================================
   const {
     status = "IDLE",
@@ -50,40 +49,81 @@ export default function AuctionZone({
   const minAccept = minAcceptancePrice || min_price;
   const bid = currentBid || current_bid;
   const leader = highestBidder || highest_bidder_slot;
-  const time = timeLeft ?? time_left;
   const running = timerRunning ?? timer_running;
 
-  const timerIntervalRef = useRef(null);
+  // ==========================================================================
+  // TIMER LOCAL
+  // El timer vive SOLO en el cliente. No se persiste en BD en cada tick.
+  // Persistir cada segundo causa race conditions con refreshSnapshot
+  // (el timer sube y baja constantemente).
+  // ==========================================================================
+  const [localTime, setLocalTime] = React.useState(timeLeft ?? time_left ?? 20);
+  const timeRef = useRef(localTime);
+  timeRef.current = localTime;
 
-  // ==========================================================================
-  // CRONÓMETRO DE PUJA
-  // ==========================================================================
+  // Sincronizar el timer local con la prop SOLO cuando arranca una subasta nueva
+  // (es decir, cuando pasamos a BIDDING con running=true desde un estado distinto)
+  const prevStatusRef = useRef(status);
   useEffect(() => {
-    if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current);
-      timerIntervalRef.current = null;
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+
+    // Cuando arranca la subasta (cambio a BIDDING con running activo)
+    if (status === "BIDDING" && running && prev !== "BIDDING") {
+      // Tomar el valor actual de la prop como base
+      setLocalTime(timeLeft ?? time_left ?? 20);
+    }
+    // Cuando se resetea a IDLE, resetear timer local
+    if (status === "IDLE") {
+      setLocalTime(settings?.auctionTime || 20);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, running]);
+
+  // ==========================================================================
+  // INTERVALO DEL CRONÓMETRO
+  // Un solo interval, que se monta cuando BIDDING+running, y no se re-crea
+  // en cada tick. Lee el tiempo actual desde timeRef.
+  // ==========================================================================
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    // Limpiar interval previo
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
-    if (status === "BIDDING" && running) {
-      timerIntervalRef.current = setInterval(() => {
-        if (time > 1) {
-          sounds.playTimerTick(time <= 6);
-          onTimerTick(time - 1);
-        } else {
-          clearInterval(timerIntervalRef.current);
-          timerIntervalRef.current = null;
-          onTimeExpired();
-        }
-      }, 1000);
-    }
+    if (status !== "BIDDING" || !running) return;
+
+    intervalRef.current = setInterval(() => {
+      const current = timeRef.current;
+
+      if (current > 1) {
+        sounds.playTimerTick(current <= 6);
+        const next = current - 1;
+        setLocalTime(next);
+
+        // Notificar al padre SOLO localmente (no persistir en BD)
+        // onTimerTick se usa aquí solo como hook para quien lo necesite.
+        // En la práctica ya no persistimos.
+        // (Si en algún momento se quiere persistir, solo hacerlo cada 5s)
+      } else {
+        // Llegó a 0 → expirar
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        setLocalTime(0);
+        onTimeExpired();
+      }
+    }, 1000);
 
     return () => {
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-        timerIntervalRef.current = null;
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [status, running, time, onTimerTick, onTimeExpired]);
+  }, [status, running, onTimeExpired]);
 
   // ==========================================================================
   // CONFETTI / SONIDOS DE RESOLUCIÓN
@@ -102,9 +142,10 @@ export default function AuctionZone({
   }, [status]);
 
   // ==========================================================================
-  // CÁLCULOS
+  // CÁLCULOS DERIVADOS
   // ==========================================================================
   const maxTime = settings?.auctionTime || 20;
+  const time = localTime;
   const progressPercent = Math.max(0, Math.min(100, (time / maxTime) * 100));
   const isUrgent = time <= 5 && running;
 
@@ -167,8 +208,7 @@ export default function AuctionZone({
   }
 
   // ==========================================================================
-  // 2. SELECTING — ruleta
-  // ⚠️ FIX: `key` fuerza remount cuando cambia el personaje objetivo.
+  // 2. SELECTING
   // ==========================================================================
   if (status === "SELECTING") {
     return (
