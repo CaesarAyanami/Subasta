@@ -93,6 +93,15 @@ export default function App() {
   const isAuctionIdle = auction?.status === "IDLE";
   const showRoundControls = canAdvanceRound || isAuctionIdle;
 
+  // ==========================================================================
+  // LÍMITE DE SUBASTAS POR RONDA
+  // Bloquea el botón "MARCAR LISTO" cuando se alcanza el límite.
+  // ==========================================================================
+  const maxAuctions = settings?.maxAuctionsPerRound ?? 20;
+  const auctionsThisRound = game?.auctions_this_round ?? 0;
+  const isLimitReached = auctionsThisRound >= maxAuctions;
+  const canToggleReady = auction.status === "IDLE" && !isLimitReached;
+
   // --------------------------------------------------------------------------
   // INIT
   // --------------------------------------------------------------------------
@@ -189,6 +198,16 @@ export default function App() {
   }, "Puja rechazada");
 
   const handleToggleReady = withToast(async (slot) => {
+    // Bloqueo extra por si acaso
+    if (isLimitReached) {
+      showToast(
+        "LÍMITE ALCANZADO",
+        `Máximo ${maxAuctions} sorteos por ronda. Avanza de ronda.`,
+        "warning",
+        3000
+      );
+      return;
+    }
     await toggleReady(slot);
   });
 
@@ -211,7 +230,7 @@ export default function App() {
     showToast("VOTO RETIRADO", "Has cancelado tu selección", "info", 1500);
   });
 
-  // NUEVO: Reset de partida desde admin (sin confirmación de jugadores)
+  // Reset de partida desde admin (sin confirmación de jugadores)
   const handleAdminReset = withToast(async () => {
     await adminResetGame();
     showToast(
@@ -265,6 +284,7 @@ export default function App() {
                   settings={settings}
                   players={players}
                   mySlot={mySlot}
+                  game={game}
                   onBid={handleBid}
                   onToggleFinish={handleToggleFinish}
                   onRouletteFinished={markAuctionBidding}
@@ -279,7 +299,7 @@ export default function App() {
                   player={players?.player1}
                   isLocalPlayer={mySlot === "player1"}
                   isOccupied={!!players?.player1?.is_occupied}
-                  canToggleReady={auction.status === "IDLE"}
+                  canToggleReady={canToggleReady}
                   onUpdateName={(name) => updatePlayerName("player1", name)}
                   onToggleReady={() => handleToggleReady("player1")}
                   onTakeSlot={() => handleTakeSlot("player1")}
@@ -296,7 +316,7 @@ export default function App() {
                   player={players?.player2}
                   isLocalPlayer={mySlot === "player2"}
                   isOccupied={!!players?.player2?.is_occupied}
-                  canToggleReady={auction.status === "IDLE"}
+                  canToggleReady={canToggleReady}
                   onUpdateName={(name) => updatePlayerName("player2", name)}
                   onToggleReady={() => handleToggleReady("player2")}
                   onTakeSlot={() => handleTakeSlot("player2")}

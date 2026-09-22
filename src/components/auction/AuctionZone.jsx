@@ -5,6 +5,7 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import CharacterCard from "./CharacterCard";
@@ -18,6 +19,7 @@ export default function AuctionZone({
   settings,
   players,
   mySlot,
+  game, // ← NUEVO: necesitamos `game` para leer auctions_this_round
   onBid,
   onToggleFinish,
   onRouletteFinished,
@@ -26,8 +28,6 @@ export default function AuctionZone({
 }) {
   // ==========================================================================
   // NORMALIZACIÓN DE PROPS
-  // Leemos de auctionState SIN destructuring con defaults engañosos.
-  // Un `default = false` en destructuring sobreescribe el `??`.
   // ==========================================================================
   const {
     status = "IDLE",
@@ -51,10 +51,14 @@ export default function AuctionZone({
   const minAccept = minAcceptancePrice || min_price;
   const bid = currentBid || current_bid;
   const leader = highestBidder || highest_bidder_slot;
-
-  // ✅ FIX: usamos || en vez de ?? porque los defaults del destructuring
-  // ya rellenan las variables. Si alguno es true, running debe ser true.
   const running = timer_running === true || timerRunning === true;
+
+  // ==========================================================================
+  // LÍMITE DE SUBASTAS POR RONDA
+  // ==========================================================================
+  const maxAuctions = settings?.maxAuctionsPerRound ?? 20;
+  const auctionsThisRound = game?.auctions_this_round ?? 0;
+  const isLimitReached = auctionsThisRound >= maxAuctions;
 
   // ==========================================================================
   // TIMER LOCAL
@@ -65,10 +69,7 @@ export default function AuctionZone({
   const timeRef = useRef(localTime);
   timeRef.current = localTime;
 
-  // ==========================================================================
-  // SINCRONIZAR TIMER LOCAL CON LA PROP
-  // Solo cuando arranca una subasta nueva (transición a BIDDING+running).
-  // ==========================================================================
+  // Sincronizar timer con la prop cuando arranca/termina una subasta
   const prevStatusRef = useRef(status);
   useEffect(() => {
     const prev = prevStatusRef.current;
@@ -174,11 +175,23 @@ export default function AuctionZone({
             ZONA DE SUBASTA
           </h2>
 
+          {/* Contador de subastas por ronda */}
+          <AuctionCounter
+            current={auctionsThisRound}
+            max={maxAuctions}
+            isLimitReached={isLimitReached}
+          />
+
           <p className="font-['Chakra_Petch'] text-sm text-slate-300">
             {pool.length === 0 ? (
               <span className="text-rose-400 font-bold">
                 ⚠️ No quedan personajes en el pool disponible. Usa los botones
                 inferiores para reiniciar o añadir desechos.
+              </span>
+            ) : isLimitReached ? (
+              <span className="text-rose-400 font-bold">
+                ⚠️ Límite de {maxAuctions} sorteos alcanzado. Usa los botones
+                inferiores para avanzar de ronda.
               </span>
             ) : (
               "Para comenzar la subasta, ambos jugadores deben presionar su botón de [ ¡LISTO! ]"
@@ -313,6 +326,14 @@ export default function AuctionZone({
       className="rounded-2xl border-4 border-yellow-400 bg-[#121526] p-4 sm:p-5 shadow-[6px_6px_0_#eab308] space-y-4"
       aria-label="Subasta en curso"
     >
+      {/* Contador de sorteos */}
+      <AuctionCounter
+        current={auctionsThisRound}
+        max={maxAuctions}
+        isLimitReached={isLimitReached}
+        compact
+      />
+
       {/* Cronómetro */}
       <div className="bg-black/60 rounded-xl p-3 border-2 border-slate-700">
         <div className="flex items-center justify-between mb-2">
@@ -405,6 +426,68 @@ export default function AuctionZone({
         onBid={onBid}
         onToggleFinish={onToggleFinish}
       />
+    </div>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTE: AuctionCounter
+// Muestra el progreso de subastas por ronda.
+// ============================================================================
+function AuctionCounter({ current, max, isLimitReached, compact = false }) {
+  const percent = Math.min(100, (current / max) * 100);
+  const colorBar = isLimitReached
+    ? "bg-rose-500"
+    : percent >= 75
+    ? "bg-amber-500"
+    : "bg-emerald-500";
+
+  const colorText = isLimitReached
+    ? "text-rose-400"
+    : percent >= 75
+    ? "text-amber-400"
+    : "text-emerald-400";
+
+  return (
+    <div
+      className={`bg-black/50 border-2 rounded-xl ${
+        isLimitReached ? "border-rose-500/60" : "border-slate-700"
+      } ${compact ? "p-2" : "p-3"}`}
+      role="status"
+      aria-live="polite"
+      aria-label={`Sorteo ${current} de ${max}`}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="flex items-center gap-1.5">
+          {isLimitReached ? (
+            <AlertTriangle
+              className="w-3.5 h-3.5 text-rose-400"
+              aria-hidden="true"
+            />
+          ) : (
+            <Sparkles
+              className="w-3.5 h-3.5 text-yellow-400"
+              aria-hidden="true"
+            />
+          )}
+          <span className="font-['Press_Start_2P'] text-[9px] uppercase text-slate-300">
+            {isLimitReached ? "LÍMITE ALCANZADO" : "SORTEO DE LA RONDA"}
+          </span>
+        </div>
+        <span
+          className={`font-['Press_Start_2P'] ${colorText} ${
+            compact ? "text-[10px]" : "text-xs"
+          }`}
+        >
+          {current} / {max}
+        </span>
+      </div>
+      <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-700">
+        <div
+          className={`h-full transition-all duration-300 ${colorBar}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

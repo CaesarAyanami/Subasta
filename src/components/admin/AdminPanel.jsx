@@ -16,6 +16,7 @@ import {
   Search,
   RotateCcw,
   X,
+  Package,
 } from "lucide-react";
 import CharacterFormModal from "./CharacterFormModal";
 import { RARITY_CONFIG } from "../auction/CharacterCard";
@@ -26,8 +27,6 @@ import sounds from "../../services/soundEffects";
 // ============================================================================
 const ALL_RARITIES = ["R", "SR", "SSR", "UR", "LR"];
 
-// Filtros que estarán disponibles cuando se implemente el #8 (Nanatsu)
-// Por ahora están deshabilitados.
 const COMING_SOON_FILTERS = [
   { id: "attribute", label: "Atributo" },
   { id: "race", label: "Raza" },
@@ -58,6 +57,9 @@ export default function AdminPanel({
   // Settings (form)
   const [initialCoins, setInitialCoins] = useState(settings?.initialCoins ?? 20);
   const [auctionTime, setAuctionTime] = useState(settings?.auctionTime ?? 20);
+  const [maxAuctionsPerRound, setMaxAuctionsPerRound] = useState(
+    settings?.maxAuctionsPerRound ?? 20
+  );
   const [animationType, setAnimationType] = useState(
     settings?.animationType || "roulette"
   );
@@ -72,7 +74,7 @@ export default function AdminPanel({
 
   // Filtros
   const [searchQuery, setSearchQuery] = useState("");
-  const [rarityFilter, setRarityFilter] = useState([]); // array de rarezas activas
+  const [rarityFilter, setRarityFilter] = useState([]);
   const [minAcceptance, setMinAcceptance] = useState("");
   const [maxAcceptance, setMaxAcceptance] = useState("");
 
@@ -82,8 +84,14 @@ export default function AdminPanel({
   useEffect(() => {
     setInitialCoins(settings?.initialCoins ?? 20);
     setAuctionTime(settings?.auctionTime ?? 20);
+    setMaxAuctionsPerRound(settings?.maxAuctionsPerRound ?? 20);
     setAnimationType(settings?.animationType || "roulette");
-  }, [settings?.initialCoins, settings?.auctionTime, settings?.animationType]);
+  }, [
+    settings?.initialCoins,
+    settings?.auctionTime,
+    settings?.maxAuctionsPerRound,
+    settings?.animationType,
+  ]);
 
   // ==========================================================================
   // DATOS DERIVADOS
@@ -94,23 +102,20 @@ export default function AdminPanel({
   const totalCharacters = available.length + used.length + discarded.length;
 
   // ==========================================================================
-  // FILTRADO (buscador + rareza + rango de aceptación)
+  // FILTRADO
   // ==========================================================================
   const filteredAvailable = useMemo(() => {
     let result = available;
 
-    // 1. Buscador por nombre
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((c) => c.name?.toLowerCase().includes(q));
     }
 
-    // 2. Filtro por rareza
     if (rarityFilter.length > 0) {
       result = result.filter((c) => rarityFilter.includes(c.rarity));
     }
 
-    // 3. Rango de aceptación
     const min = parseInt(minAcceptance, 10);
     const max = parseInt(maxAcceptance, 10);
     if (!isNaN(min)) {
@@ -203,6 +208,10 @@ export default function AdminPanel({
       await onUpdateSettings({
         initialCoins: Math.max(1, parseInt(initialCoins, 10) || 20),
         auctionTime: Math.max(5, parseInt(auctionTime, 10) || 20),
+        maxAuctionsPerRound: Math.max(
+          1,
+          Math.min(200, parseInt(maxAuctionsPerRound, 10) || 20)
+        ),
         animationType,
       });
       setSavedSuccess(true);
@@ -210,7 +219,12 @@ export default function AdminPanel({
       setTimeout(() => setSavedSuccess(false), 2000);
     } catch (err) {
       console.error("[AdminPanel.handleSaveSettings]", err);
-      showToast?.("ERROR", err.message || "No se pudieron guardar los ajustes", "warning", 3500);
+      showToast?.(
+        "ERROR",
+        err.message || "No se pudieron guardar los ajustes",
+        "warning",
+        3500
+      );
     } finally {
       setIsSaving(false);
     }
@@ -297,7 +311,6 @@ export default function AdminPanel({
           </p>
         </div>
 
-        {/* Tabs */}
         <div
           role="tablist"
           aria-label="Secciones del panel"
@@ -336,12 +349,8 @@ export default function AdminPanel({
         </div>
       </div>
 
-      {/* ====================================================================
-          ACCIONES RÁPIDAS
-          Ahora son 4 botones. En pantallas grandes van en 2x2.
-          ==================================================================== */}
+      {/* Acciones rápidas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* 1. Agregar personaje */}
         <button
           type="button"
           id="btn-admin-add"
@@ -353,7 +362,6 @@ export default function AdminPanel({
           <span>AGREGAR</span>
         </button>
 
-        {/* 2. Cargar seed */}
         <button
           type="button"
           id="btn-admin-seed"
@@ -372,7 +380,6 @@ export default function AdminPanel({
           <span>{isSeeding ? "CARGANDO..." : "SEED"}</span>
         </button>
 
-        {/* 3. RESET PARTIDA (NUEVO) */}
         {showResetConfirm ? (
           <div
             className="flex gap-2"
@@ -417,7 +424,6 @@ export default function AdminPanel({
           </button>
         )}
 
-        {/* 4. Limpiar DB */}
         {showCleanConfirm ? (
           <div
             className="flex gap-2"
@@ -463,12 +469,9 @@ export default function AdminPanel({
         )}
       </div>
 
-      {/* ====================================================================
-          TAB: PERSONAJES
-          ==================================================================== */}
+      {/* TAB: PERSONAJES */}
       {activeTab === "characters" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
-          {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
             <div>
               <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400">
@@ -493,11 +496,8 @@ export default function AdminPanel({
             </button>
           </div>
 
-          {/* ================================================================
-              ZONA DE FILTROS
-              ================================================================ */}
+          {/* ZONA DE FILTROS */}
           <div className="space-y-3 bg-black/30 border-2 border-slate-800 rounded-xl p-3">
-            {/* Fila 1: Buscador + botón limpiar */}
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative flex-1 min-w-[200px]">
                 <Search
@@ -531,9 +531,7 @@ export default function AdminPanel({
               )}
             </div>
 
-            {/* Fila 2: Filtros de rareza + rango de aceptación */}
             <div className="flex flex-wrap gap-3 items-center">
-              {/* Rarezas */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
                   Rareza:
@@ -562,7 +560,6 @@ export default function AdminPanel({
                 })}
               </div>
 
-              {/* Aceptación */}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
                   Acept:
@@ -594,7 +591,6 @@ export default function AdminPanel({
                 />
               </div>
 
-              {/* Filtros "próximamente" (#8) */}
               <div className="flex items-center gap-1.5 ml-auto">
                 {COMING_SOON_FILTERS.map((f) => (
                   <button
@@ -612,9 +608,7 @@ export default function AdminPanel({
             </div>
           </div>
 
-          {/* ================================================================
-              LISTA DE PERSONAJES
-              ================================================================ */}
+          {/* LISTA */}
           {available.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
               <AlertTriangle
@@ -731,9 +725,7 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* ====================================================================
-          TAB: AJUSTES
-          ==================================================================== */}
+      {/* TAB: AJUSTES */}
       {activeTab === "settings" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000]">
           <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400 mb-4 border-b-2 border-slate-800 pb-3">
@@ -787,6 +779,31 @@ export default function AdminPanel({
               />
               <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
                 Por defecto: 20 segundos. Tiempo del cronómetro de pujas.
+              </p>
+            </div>
+
+            {/* ⚠️ NUEVO: máximo de subastas por ronda */}
+            <div>
+              <label
+                htmlFor="input-max-auctions"
+                className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-1.5"
+              >
+                <Package className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+                <span>Personajes por Ronda:</span>
+              </label>
+              <input
+                type="number"
+                id="input-max-auctions"
+                name="input-max-auctions"
+                min="1"
+                max="200"
+                value={maxAuctionsPerRound}
+                onChange={(e) => setMaxAuctionsPerRound(e.target.value)}
+                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-emerald-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-400/40"
+              />
+              <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
+                Máximo de subastas antes de que la ronda se bloquee
+                automáticamente. Recomendado: 20. Rango: 1-200.
               </p>
             </div>
 
@@ -894,7 +911,6 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* Modal crear/editar */}
       <CharacterFormModal
         isOpen={modalOpen}
         onClose={() => {

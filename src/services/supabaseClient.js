@@ -32,7 +32,8 @@ export const supabase = isSupabaseConfigured
 const CLIENT_ID_KEY = "arcade_auction_client_id";
 
 function getOrCreateClientId() {
-  if (typeof window === "undefined") return "server_" + Math.random().toString(36).slice(2, 9);
+  if (typeof window === "undefined")
+    return "server_" + Math.random().toString(36).slice(2, 9);
   try {
     let id = localStorage.getItem(CLIENT_ID_KEY);
     if (!id) {
@@ -52,7 +53,11 @@ export const CLIENT_ID = getOrCreateClientId();
 // ============================================================================
 export function unwrap({ data, error }) {
   if (error) {
-    const msg = error.message || error.hint || error.details || "Error desconocido en Supabase";
+    const msg =
+      error.message ||
+      error.hint ||
+      error.details ||
+      "Error desconocido en Supabase";
     console.error("[Supabase Error]", error);
     throw new Error(msg);
   }
@@ -71,6 +76,7 @@ export const DEFAULT_SETTINGS = {
   antiSnipeSeconds: 3,
   antiSnipeExtension: 5,
   winStreakBonus: 3,
+  maxAuctionsPerRound: 20, // ← NUEVO: límite de subastas por ronda
 };
 
 export const MAX_INVENTORY_SLOTS = 4;
