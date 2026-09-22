@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Trash2,
@@ -13,10 +13,26 @@ import {
   AlertTriangle,
   ArrowLeft,
   Loader2,
+  Search,
+  RotateCcw,
+  X,
 } from "lucide-react";
 import CharacterFormModal from "./CharacterFormModal";
 import { RARITY_CONFIG } from "../auction/CharacterCard";
 import sounds from "../../services/soundEffects";
+
+// ============================================================================
+// CONSTANTES
+// ============================================================================
+const ALL_RARITIES = ["R", "SR", "SSR", "UR", "LR"];
+
+// Filtros que estarán disponibles cuando se implemente el #8 (Nanatsu)
+// Por ahora están deshabilitados.
+const COMING_SOON_FILTERS = [
+  { id: "attribute", label: "Atributo" },
+  { id: "race", label: "Raza" },
+  { id: "trait", label: "Característica" },
+];
 
 export default function AdminPanel({
   settings,
@@ -27,6 +43,7 @@ export default function AdminPanel({
   onDeleteCharacter,
   onResetDatabase,
   onSeedDefaultCharacters,
+  onAdminReset,
   showToast,
 }) {
   // ==========================================================================
@@ -35,6 +52,7 @@ export default function AdminPanel({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCharacter, setEditingCharacter] = useState(null);
   const [showCleanConfirm, setShowCleanConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState("characters");
 
   // Settings (form)
@@ -49,20 +67,23 @@ export default function AdminPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [isWiping, setIsWiping] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
+  // Filtros
+  const [searchQuery, setSearchQuery] = useState("");
+  const [rarityFilter, setRarityFilter] = useState([]); // array de rarezas activas
+  const [minAcceptance, setMinAcceptance] = useState("");
+  const [maxAcceptance, setMaxAcceptance] = useState("");
+
   // ==========================================================================
-  // SINCRONIZAR SETTINGS SI CAMBIAN DESDE FUERA
+  // SINCRONIZAR SETTINGS
   // ==========================================================================
   useEffect(() => {
     setInitialCoins(settings?.initialCoins ?? 20);
     setAuctionTime(settings?.auctionTime ?? 20);
     setAnimationType(settings?.animationType || "roulette");
-  }, [
-    settings?.initialCoins,
-    settings?.auctionTime,
-    settings?.animationType,
-  ]);
+  }, [settings?.initialCoins, settings?.auctionTime, settings?.animationType]);
 
   // ==========================================================================
   // DATOS DERIVADOS
@@ -71,6 +92,59 @@ export default function AdminPanel({
   const used = characterPool?.used || [];
   const discarded = characterPool?.discarded || [];
   const totalCharacters = available.length + used.length + discarded.length;
+
+  // ==========================================================================
+  // FILTRADO (buscador + rareza + rango de aceptación)
+  // ==========================================================================
+  const filteredAvailable = useMemo(() => {
+    let result = available;
+
+    // 1. Buscador por nombre
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter((c) => c.name?.toLowerCase().includes(q));
+    }
+
+    // 2. Filtro por rareza
+    if (rarityFilter.length > 0) {
+      result = result.filter((c) => rarityFilter.includes(c.rarity));
+    }
+
+    // 3. Rango de aceptación
+    const min = parseInt(minAcceptance, 10);
+    const max = parseInt(maxAcceptance, 10);
+    if (!isNaN(min)) {
+      result = result.filter((c) => (c.acceptance ?? 0) >= min);
+    }
+    if (!isNaN(max)) {
+      result = result.filter((c) => (c.acceptance ?? 0) <= max);
+    }
+
+    return result;
+  }, [available, searchQuery, rarityFilter, minAcceptance, maxAcceptance]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    rarityFilter.length > 0 ||
+    minAcceptance !== "" ||
+    maxAcceptance !== "";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setRarityFilter([]);
+    setMinAcceptance("");
+    setMaxAcceptance("");
+    sounds.playClick();
+  };
+
+  const toggleRarity = (rarity) => {
+    sounds.playClick();
+    setRarityFilter((prev) =>
+      prev.includes(rarity)
+        ? prev.filter((r) => r !== rarity)
+        : [...prev, rarity]
+    );
+  };
 
   // ==========================================================================
   // HANDLERS — MODAL
@@ -143,7 +217,7 @@ export default function AdminPanel({
   };
 
   // ==========================================================================
-  // HANDLERS — SEED / WIPE
+  // HANDLERS — SEED / WIPE / RESET
   // ==========================================================================
   const handleSeed = async () => {
     sounds.playVictory();
@@ -171,6 +245,20 @@ export default function AdminPanel({
       showToast?.("ERROR", err.message || "No se pudo limpiar", "warning", 3500);
     } finally {
       setIsWiping(false);
+    }
+  };
+
+  const handleAdminReset = async () => {
+    sounds.playVictory();
+    setShowResetConfirm(false);
+    setIsResetting(true);
+    try {
+      await onAdminReset();
+    } catch (err) {
+      console.error("[AdminPanel.handleAdminReset]", err);
+      showToast?.("ERROR", err.message || "No se pudo resetear", "warning", 3500);
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -248,8 +336,12 @@ export default function AdminPanel({
         </div>
       </div>
 
-      {/* Acciones rápidas */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* ====================================================================
+          ACCIONES RÁPIDAS
+          Ahora son 4 botones. En pantallas grandes van en 2x2.
+          ==================================================================== */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* 1. Agregar personaje */}
         <button
           type="button"
           id="btn-admin-add"
@@ -258,9 +350,10 @@ export default function AdminPanel({
           className="p-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
         >
           <Plus className="w-4 h-4" aria-hidden="true" />
-          <span>AGREGAR PERSONAJE</span>
+          <span>AGREGAR</span>
         </button>
 
+        {/* 2. Cargar seed */}
         <button
           type="button"
           id="btn-admin-seed"
@@ -276,9 +369,55 @@ export default function AdminPanel({
           ) : (
             <Download className="w-4 h-4" aria-hidden="true" />
           )}
-          <span>{isSeeding ? "CARGANDO..." : "CARGAR SEED"}</span>
+          <span>{isSeeding ? "CARGANDO..." : "SEED"}</span>
         </button>
 
+        {/* 3. RESET PARTIDA (NUEVO) */}
+        {showResetConfirm ? (
+          <div
+            className="flex gap-2"
+            role="alertdialog"
+            aria-label="Confirmar reset de partida"
+          >
+            <button
+              type="button"
+              id="btn-admin-confirm-reset"
+              name="btn-admin-confirm-reset"
+              onClick={handleAdminReset}
+              disabled={isResetting}
+              className="flex-1 p-3 bg-amber-500 hover:bg-amber-400 rounded-xl border-4 border-black text-black font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60"
+            >
+              {isResetting ? "RESET..." : "¿RESET?"}
+            </button>
+            <button
+              type="button"
+              id="btn-admin-cancel-reset"
+              name="btn-admin-cancel-reset"
+              onClick={() => setShowResetConfirm(false)}
+              className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+            >
+              No
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            id="btn-admin-reset"
+            name="btn-admin-reset"
+            onClick={() => {
+              sounds.playClick();
+              setShowResetConfirm(true);
+            }}
+            title="Reinicia el estado de la partida SIN borrar personajes"
+            aria-label="Resetear partida (mantiene personajes)"
+            className="p-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <RotateCcw className="w-4 h-4" aria-hidden="true" />
+            <span>RESET PARTIDA</span>
+          </button>
+        )}
+
+        {/* 4. Limpiar DB */}
         {showCleanConfirm ? (
           <div
             className="flex gap-2"
@@ -293,7 +432,7 @@ export default function AdminPanel({
               disabled={isWiping}
               className="flex-1 p-3 bg-rose-600 hover:bg-rose-500 rounded-xl border-4 border-black text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60"
             >
-              {isWiping ? "BORRANDO..." : "¿BORRAR TODO?"}
+              {isWiping ? "BORRANDO..." : "¿BORRAR DB?"}
             </button>
             <button
               type="button"
@@ -310,22 +449,31 @@ export default function AdminPanel({
             type="button"
             id="btn-admin-wipe"
             name="btn-admin-wipe"
-            onClick={() => setShowCleanConfirm(true)}
+            onClick={() => {
+              sounds.playClick();
+              setShowCleanConfirm(true);
+            }}
+            title="Borra TODOS los personajes del catálogo (irreversible)"
+            aria-label="Borrar todos los personajes del catálogo"
             className="p-3.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-white font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-rose-300"
           >
             <Trash2 className="w-4 h-4 text-yellow-300" aria-hidden="true" />
-            <span>LIMPIAR DB</span>
+            <span>BORRAR DB</span>
           </button>
         )}
       </div>
 
-      {/* TAB: PERSONAJES */}
+      {/* ====================================================================
+          TAB: PERSONAJES
+          ==================================================================== */}
       {activeTab === "characters" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
+          {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
             <div>
               <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400">
-                POOL DE PERSONAJES ({available.length} DISPONIBLES)
+                POOL DE PERSONAJES ({filteredAvailable.length}
+                {hasActiveFilters ? ` / ${available.length}` : ""} DISPONIBLES)
               </h2>
               <p className="text-xs text-slate-400 font-['Chakra_Petch']">
                 Total cargados: {totalCharacters} | Usados: {used.length} |
@@ -345,6 +493,128 @@ export default function AdminPanel({
             </button>
           </div>
 
+          {/* ================================================================
+              ZONA DE FILTROS
+              ================================================================ */}
+          <div className="space-y-3 bg-black/30 border-2 border-slate-800 rounded-xl p-3">
+            {/* Fila 1: Buscador + botón limpiar */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
+                  aria-hidden="true"
+                />
+                <input
+                  type="text"
+                  id="admin-search"
+                  name="admin-search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar personaje por nombre..."
+                  aria-label="Buscar personaje por nombre"
+                  className="w-full pl-9 pr-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-cyan-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-cyan-400/40"
+                />
+              </div>
+
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  id="btn-admin-clear-filters"
+                  name="btn-admin-clear-filters"
+                  onClick={clearFilters}
+                  aria-label="Limpiar todos los filtros"
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 rounded-lg text-xs font-['Chakra_Petch'] text-slate-200 flex items-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-rose-400"
+                >
+                  <X className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Limpiar filtros</span>
+                </button>
+              )}
+            </div>
+
+            {/* Fila 2: Filtros de rareza + rango de aceptación */}
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* Rarezas */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
+                  Rareza:
+                </span>
+                {ALL_RARITIES.map((r) => {
+                  const isActive = rarityFilter.includes(r);
+                  const cfg = RARITY_CONFIG[r];
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      id={`btn-filter-rarity-${r}`}
+                      name={`btn-filter-rarity-${r}`}
+                      onClick={() => toggleRarity(r)}
+                      aria-pressed={isActive}
+                      aria-label={`Filtrar por rareza ${r}`}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
+                        isActive
+                          ? `${cfg.badgeClass} scale-105`
+                          : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      {r}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Aceptación */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
+                  Acept:
+                </span>
+                <input
+                  type="number"
+                  id="admin-acceptance-min"
+                  name="admin-acceptance-min"
+                  min="0"
+                  max="20"
+                  value={minAcceptance}
+                  onChange={(e) => setMinAcceptance(e.target.value)}
+                  placeholder="min"
+                  aria-label="Aceptación mínima"
+                  className="w-16 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+                />
+                <span className="text-slate-500 text-xs">–</span>
+                <input
+                  type="number"
+                  id="admin-acceptance-max"
+                  name="admin-acceptance-max"
+                  min="0"
+                  max="20"
+                  value={maxAcceptance}
+                  onChange={(e) => setMaxAcceptance(e.target.value)}
+                  placeholder="max"
+                  aria-label="Aceptación máxima"
+                  className="w-16 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+                />
+              </div>
+
+              {/* Filtros "próximamente" (#8) */}
+              <div className="flex items-center gap-1.5 ml-auto">
+                {COMING_SOON_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    disabled
+                    title={`Filtro por ${f.label} (próximamente)`}
+                    aria-label={`Filtro por ${f.label} próximamente`}
+                    className="px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 border-slate-800 bg-slate-900/60 text-slate-600 cursor-not-allowed"
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ================================================================
+              LISTA DE PERSONAJES
+              ================================================================ */}
           {available.length === 0 ? (
             <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
               <AlertTriangle
@@ -365,9 +635,26 @@ export default function AdminPanel({
                 {isSeeding ? "Cargando..." : "Cargar Personajes Iniciales"}
               </button>
             </div>
+          ) : filteredAvailable.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
+              <Search
+                className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-60"
+                aria-hidden="true"
+              />
+              <p className="font-['Press_Start_2P'] text-xs text-slate-400 mb-3">
+                No hay personajes que coincidan con los filtros.
+              </p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-['Chakra_Petch'] text-xs rounded-xl border-2 border-slate-600 shadow-[3px_3px_0_#000]"
+              >
+                Limpiar filtros
+              </button>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {available.map((char) => {
+              {filteredAvailable.map((char) => {
                 const config = RARITY_CONFIG[char.rarity || "R"];
                 const imgSrc = char.image_url || char.imageUrl || "";
                 return (
@@ -444,7 +731,9 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* TAB: AJUSTES */}
+      {/* ====================================================================
+          TAB: AJUSTES
+          ==================================================================== */}
       {activeTab === "settings" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000]">
           <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400 mb-4 border-b-2 border-slate-800 pb-3">

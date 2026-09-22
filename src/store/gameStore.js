@@ -18,6 +18,7 @@ import {
   cancelVote,
   advanceRound,
   updateGameSettings,
+  adminResetGame,
 } from "../services/gameService";
 import {
   createCharacter,
@@ -243,10 +244,8 @@ export const useGameStore = create((set, get) => ({
 
     const currentSlot = get().mySlot;
 
-    // Si ya tienes este slot → no hacer nada
     if (currentSlot === slot) return;
 
-    // Si ya tienes otro slot → primero liberar el actual
     if (currentSlot && currentSlot !== slot) {
       try {
         get().stopHeartbeat();
@@ -257,7 +256,6 @@ export const useGameStore = create((set, get) => ({
       }
     }
 
-    // Ahora tomar el nuevo slot
     try {
       await takeSlot(gameId, slot);
       set({ mySlot: slot });
@@ -265,13 +263,11 @@ export const useGameStore = create((set, get) => ({
       await get().refreshSnapshot();
     } catch (err) {
       console.error("[takeSlot]", err);
-      // Si falló, refrescar para que la UI refleje el estado real
       await get().refreshSnapshot();
       throw err;
     }
   },
 
-  // Volver a espectador (liberar slot sin tomar otro)
   async becomeSpectator() {
     const { game, mySlot } = get();
     if (!game || !mySlot) return;
@@ -287,7 +283,6 @@ export const useGameStore = create((set, get) => ({
     }
   },
 
-  // Alias retrocompatible
   async releaseMySlot() {
     return get().becomeSpectator();
   },
@@ -458,6 +453,23 @@ export const useGameStore = create((set, get) => ({
   async wipeCharacters() {
     await deleteAllCharacters();
     await get().refreshSnapshot();
+  },
+
+  // --------------------------------------------------------------------------
+  // NUEVO: ADMIN RESET GAME
+  // Resetea el estado de la partida sin pedir confirmación a los jugadores.
+  // NO borra personajes. Solo reinicia pool, inventarios, monedas, subasta.
+  // --------------------------------------------------------------------------
+  async adminResetGame() {
+    const gameId = get().game?.id;
+    if (!gameId) return;
+    try {
+      await adminResetGame(gameId);
+      await get().refreshSnapshot();
+    } catch (err) {
+      console.error("[adminResetGame]", err);
+      throw err;
+    }
   },
 
   // --------------------------------------------------------------------------

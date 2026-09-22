@@ -62,6 +62,7 @@ export default function App() {
     removeCharacter,
     seedDefaults,
     wipeCharacters,
+    adminResetGame,
   } = useGameStore();
 
   const {
@@ -210,6 +211,17 @@ export default function App() {
     showToast("VOTO RETIRADO", "Has cancelado tu selección", "info", 1500);
   });
 
+  // NUEVO: Reset de partida desde admin (sin confirmación de jugadores)
+  const handleAdminReset = withToast(async () => {
+    await adminResetGame();
+    showToast(
+      "PARTIDA RESETEADA",
+      "Estado reiniciado. Los personajes siguen en el catálogo.",
+      "sparkles",
+      3000
+    );
+  }, "No se pudo resetear la partida");
+
   // --------------------------------------------------------------------------
   // RENDER — LOADING / ERROR
   // --------------------------------------------------------------------------
@@ -323,6 +335,7 @@ export default function App() {
             onDeleteCharacter={removeCharacter}
             onResetDatabase={wipeCharacters}
             onSeedDefaultCharacters={seedDefaults}
+            onAdminReset={handleAdminReset}
             showToast={showToast}
           />
         )}

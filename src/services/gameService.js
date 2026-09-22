@@ -90,11 +90,6 @@ export async function fetchGameSnapshot(gameId) {
     }
   }
 
-  // ==========================================================================
-  // ✅ FIX #2: calcular `is_occupied` para cada jugador.
-  // is_occupied = client_id presente Y slot_locked_until en el futuro.
-  // Si el lock expiró → slot libre aunque client_id siga puesto.
-  // ==========================================================================
   const playersMap = { player1: null, player2: null };
   for (const p of players) {
     playersMap[p.slot] = {
@@ -143,9 +138,6 @@ export async function releaseSlot(gameId, slot) {
   );
 }
 
-// ============================================================================
-// Renovar el lock del slot (heartbeat)
-// ============================================================================
 export async function refreshSlotLock(gameId, slot) {
   unwrap(
     await supabase.rpc("refresh_slot_lock", {
@@ -156,9 +148,6 @@ export async function refreshSlotLock(gameId, slot) {
   );
 }
 
-// ============================================================================
-// Liberar slot de OTRO cliente (por desconexión)
-// ============================================================================
 export async function releaseSlotByClient(gameId, clientId) {
   if (!clientId) return;
   unwrap(
@@ -172,6 +161,23 @@ export async function releaseSlotByClient(gameId, clientId) {
       .eq("game_id", gameId)
       .eq("client_id", clientId)
   );
+}
+
+// ============================================================================
+// NUEVO: ADMIN RESET GAME
+// Resetea el estado de la partida SIN pedir confirmación a los jugadores.
+// Llama a la RPC `admin_reset_game` que hace todo en una sola transacción:
+//   - Todos los personajes del pool → 'available'
+//   - Vacía game_inventory y game_votes
+//   - Jugadores: monedas al initial, ready/finish/win_streak a false/0
+//   - Subasta: IDLE, sin personaje, sin pujas
+//   - Pity counter a 0
+//   - Log del evento
+// NO borra personajes del catálogo.
+// ============================================================================
+export async function adminResetGame(gameId) {
+  if (!gameId) throw new Error("gameId requerido");
+  unwrap(await supabase.rpc("admin_reset_game", { p_game_id: gameId }));
 }
 
 // ============================================================================
