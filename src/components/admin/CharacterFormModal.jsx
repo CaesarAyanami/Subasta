@@ -8,6 +8,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Plus,
+  Shield,
+  Zap,
 } from "lucide-react";
 import { RARITY_CONFIG } from "../auction/CharacterCard";
 import { uploadCharacterImage, validateImageFile } from "../../services/storageService";
@@ -43,6 +46,8 @@ const PRESET_IMAGES = [
 ];
 
 const RARITIES = ["R", "SR", "SSR", "UR", "LR"];
+const MAX_RACES = 3;
+const MAX_TRAITS = 7;
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=500";
 
@@ -54,6 +59,7 @@ export default function CharacterFormModal({
   onClose,
   onSave,
   characterToEdit = null,
+  catalogs = { attributes: [], races: [], traits: [] },
 }) {
   // --------------------------------------------------------------------------
   // ESTADO DEL FORM
@@ -63,17 +69,27 @@ export default function CharacterFormModal({
   const [acceptance, setAcceptance] = useState(3);
   const [description, setDescription] = useState("");
 
+  // ⚠️ NUEVOS CAMPOS #8
+  const [attribute, setAttribute] = useState("Desconocido");
+  const [races, setRaces] = useState([]); // array de strings
+  const [traits, setTraits] = useState([]); // array de strings
+
   // Imagen
-  const [imageMode, setImageMode] = useState("url"); // 'url' | 'upload'
+  const [imageMode, setImageMode] = useState("url");
   const [imageUrl, setImageUrl] = useState("");
   const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(""); // URL local blob o URL externa
+  const [imagePreview, setImagePreview] = useState("");
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const fileInputRef = useRef(null);
   const closeButtonRef = useRef(null);
+
+  // Catálogos
+  const attributesList = catalogs?.attributes || [];
+  const racesList = catalogs?.races || [];
+  const traitsList = catalogs?.traits || [];
 
   // ==========================================================================
   // RESET AL ABRIR
@@ -90,8 +106,12 @@ export default function CharacterFormModal({
       setRarity(characterToEdit.rarity || "SR");
       setAcceptance(characterToEdit.acceptance ?? 2);
       setDescription(characterToEdit.description || "");
+      setAttribute(characterToEdit.attribute || "Desconocido");
+      setRaces(Array.isArray(characterToEdit.races) ? characterToEdit.races : []);
+      setTraits(
+        Array.isArray(characterToEdit.traits) ? characterToEdit.traits : []
+      );
 
-      // Normalizar imagen existente
       const existing =
         characterToEdit.image_url || characterToEdit.imageUrl || "";
       setImageUrl(existing);
@@ -102,6 +122,9 @@ export default function CharacterFormModal({
       setRarity("SR");
       setAcceptance(2);
       setDescription("");
+      setAttribute("Desconocido");
+      setRaces([]);
+      setTraits([]);
       setImageUrl(PRESET_IMAGES[0].url);
       setImagePreview(PRESET_IMAGES[0].url);
       setImageMode("url");
@@ -130,7 +153,7 @@ export default function CharacterFormModal({
   }, [isOpen, onClose, submitting]);
 
   // ==========================================================================
-  // CLEANUP DEL PREVIEW (blob URLs)
+  // CLEANUP DEL PREVIEW
   // ==========================================================================
   useEffect(() => {
     return () => {
@@ -147,17 +170,13 @@ export default function CharacterFormModal({
   // ==========================================================================
   const handleFileSelect = (file) => {
     if (!file) return;
-
     const validationError = validateImageFile(file);
     if (validationError) {
       setError(validationError);
       return;
     }
-
     setError("");
     setImageFile(file);
-
-    // Generar preview local
     if (imagePreview?.startsWith("blob:")) {
       URL.revokeObjectURL(imagePreview);
     }
@@ -204,10 +223,38 @@ export default function CharacterFormModal({
   const handleUrlChange = (url) => {
     setImageUrl(url);
     setImagePreview(url);
-    if (imageFile) {
-      // Si estabas en modo upload, al cambiar la URL pasamos a modo URL
-      setImageFile(null);
-    }
+    if (imageFile) setImageFile(null);
+  };
+
+  // ==========================================================================
+  // HANDLERS DE RAZAS / TRAITS
+  // ==========================================================================
+  const toggleRace = (race) => {
+    setRaces((prev) => {
+      if (prev.includes(race)) {
+        return prev.filter((r) => r !== race);
+      }
+      if (prev.length >= MAX_RACES) {
+        setError(`Máximo ${MAX_RACES} razas por personaje.`);
+        setTimeout(() => setError(""), 2500);
+        return prev;
+      }
+      return [...prev, race];
+    });
+  };
+
+  const toggleTrait = (trait) => {
+    setTraits((prev) => {
+      if (prev.includes(trait)) {
+        return prev.filter((t) => t !== trait);
+      }
+      if (prev.length >= MAX_TRAITS) {
+        setError(`Máximo ${MAX_TRAITS} características por personaje.`);
+        setTimeout(() => setError(""), 2500);
+        return prev;
+      }
+      return [...prev, trait];
+    });
   };
 
   // ==========================================================================
@@ -217,13 +264,10 @@ export default function CharacterFormModal({
     e.preventDefault();
     setError("");
 
-    // Validar nombre
     if (!name.trim()) {
       setError("Por favor ingresa un nombre para el personaje.");
       return;
     }
-
-    // Validar imagen
     if (imageMode === "url" && !imageUrl.trim()) {
       setError("Por favor especifica una URL de imagen o sube un archivo.");
       return;
@@ -238,7 +282,6 @@ export default function CharacterFormModal({
     try {
       let finalImageUrl = imageUrl.trim();
 
-      // Subir archivo si estamos en modo upload
       if (imageMode === "upload" && imageFile) {
         const { publicUrl } = await uploadCharacterImage(
           imageFile,
@@ -256,6 +299,10 @@ export default function CharacterFormModal({
         acceptance: Math.max(0, parseInt(acceptance, 10) || 0),
         image_url: finalImageUrl,
         description: description.trim(),
+        // ⚠️ NUEVOS CAMPOS
+        attribute,
+        races,
+        traits,
       };
 
       await onSave(payload);
@@ -282,15 +329,12 @@ export default function CharacterFormModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="character-form-title"
-        className="bg-[#151928] border-4 border-yellow-400 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 shadow-[8px_8px_0_#eab308] text-white"
+        className="bg-[#151928] border-4 border-yellow-400 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-[8px_8px_0_#eab308] text-white"
       >
         {/* Cabecera */}
         <div className="flex items-center justify-between border-b-2 border-yellow-400/40 pb-3 mb-4">
           <div className="flex items-center gap-2">
-            <Sparkles
-              className="w-5 h-5 text-yellow-400"
-              aria-hidden="true"
-            />
+            <Sparkles className="w-5 h-5 text-yellow-400" aria-hidden="true" />
             <h2
               id="character-form-title"
               className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400"
@@ -301,8 +345,6 @@ export default function CharacterFormModal({
           <button
             ref={closeButtonRef}
             type="button"
-            id="btn-close-character-form"
-            name="btn-close-character-form"
             onClick={onClose}
             disabled={submitting}
             aria-label="Cerrar formulario"
@@ -338,83 +380,181 @@ export default function CharacterFormModal({
             <input
               type="text"
               id="input-char-name"
-              name="input-char-name"
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Valkyrie Omega"
               maxLength={30}
-              aria-invalid={!!error && !name.trim()}
               className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-2.5 text-sm text-white font-['Chakra_Petch'] font-semibold outline-none transition focus:ring-2 focus:ring-yellow-400/40"
             />
           </div>
 
-          {/* Rareza */}
-          <div>
-            <span
-              id="rarity-label"
-              className="block text-[11px] font-['Press_Start_2P'] text-slate-300 mb-1.5"
-            >
-              Rareza del Personaje:
-            </span>
-            <div
-              role="radiogroup"
-              aria-labelledby="rarity-label"
-              className="grid grid-cols-5 gap-2"
-            >
-              {RARITIES.map((r) => {
-                const config = RARITY_CONFIG[r];
-                const isSelected = rarity === r;
-                return (
-                  <button
-                    key={r}
-                    type="button"
-                    role="radio"
-                    aria-checked={isSelected}
-                    aria-label={`Rareza ${r}`}
-                    onClick={() => setRarity(r)}
-                    className={`py-2 px-1 rounded-xl border-2 flex flex-col items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
-                      isSelected
-                        ? `${config.badgeClass} ring-2 ring-yellow-400 scale-105 shadow-md`
-                        : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"
-                    }`}
-                  >
-                    <span className="font-['Press_Start_2P'] text-xs uppercase">
-                      {r}
-                    </span>
-                  </button>
-                );
-              })}
+          {/* Rareza + Aceptación en 2 columnas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <span className="block text-[11px] font-['Press_Start_2P'] text-slate-300 mb-1.5">
+                Rareza:
+              </span>
+              <div className="grid grid-cols-5 gap-1.5">
+                {RARITIES.map((r) => {
+                  const config = RARITY_CONFIG[r];
+                  const isSelected = rarity === r;
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setRarity(r)}
+                      aria-pressed={isSelected}
+                      className={`py-2 px-1 rounded-lg border-2 flex items-center justify-center transition-all focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                        isSelected
+                          ? `${config.badgeClass} ring-2 ring-yellow-400 scale-105`
+                          : "bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-500"
+                      }`}
+                    >
+                      <span className="font-['Press_Start_2P'] text-[10px] uppercase">
+                        {r}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <p className="text-[10px] text-slate-400 font-['Chakra_Petch'] mt-1">
-              R (Gris), SR (Dorado), SSR (Azul Arcoíris), UR (Morado Cósmico),
-              LR (Plateado Vibrante)
-            </p>
+
+            <div>
+              <label
+                htmlFor="input-char-acceptance"
+                className="block text-[11px] font-['Press_Start_2P'] text-slate-300 mb-1"
+              >
+                Aceptación (0-7):
+              </label>
+              <input
+                type="number"
+                id="input-char-acceptance"
+                min="0"
+                max="7"
+                required
+                value={acceptance}
+                onChange={(e) => setAcceptance(e.target.value)}
+                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-2.5 text-sm text-yellow-300 font-['Press_Start_2P'] outline-none focus:ring-2 focus:ring-yellow-400/40"
+              />
+            </div>
           </div>
 
-          {/* Aceptación */}
-          <div>
-            <label
-              htmlFor="input-char-acceptance"
-              className="block text-[11px] font-['Press_Start_2P'] text-slate-300 mb-1"
-            >
-              Aceptación (Rango de Compra):
-            </label>
-            <input
-              type="number"
-              id="input-char-acceptance"
-              name="input-char-acceptance"
-              min="0"
-              max="20"
-              required
-              value={acceptance}
-              onChange={(e) => setAcceptance(e.target.value)}
-              className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-2.5 text-sm text-yellow-300 font-['Press_Start_2P'] outline-none focus:ring-2 focus:ring-yellow-400/40"
-            />
-            <p className="text-[10px] text-slate-400 font-['Chakra_Petch'] mt-1">
-              Al salir en el sorteo, se genera un precio mínimo aleatorio entre 0
-              y este valor.
-            </p>
+          {/* ================================================================
+              NUEVOS CAMPOS #8: Atributo / Razas / Características
+              ================================================================ */}
+          <div className="p-3 bg-purple-950/30 border-2 border-purple-700/60 rounded-xl space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="w-4 h-4 text-purple-400" aria-hidden="true" />
+              <span className="font-['Press_Start_2P'] text-[10px] text-purple-300 uppercase">
+                Atributos del Personaje
+              </span>
+            </div>
+
+            {/* Atributo (select) */}
+            <div>
+              <label
+                htmlFor="input-char-attribute"
+                className="block text-[10px] font-['Press_Start_2P'] text-slate-300 mb-1"
+              >
+                Atributo Principal:
+              </label>
+              <select
+                id="input-char-attribute"
+                value={attribute}
+                onChange={(e) => setAttribute(e.target.value)}
+                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-purple-400 rounded-xl p-2.5 text-sm font-['Chakra_Petch'] text-white outline-none focus:ring-2 focus:ring-purple-400/40"
+              >
+                <option value="Desconocido">Desconocido</option>
+                {attributesList.map((a) => (
+                  <option key={a.id} value={a.value}>
+                    {a.value}
+                  </option>
+                ))}
+              </select>
+              {attributesList.length === 0 && (
+                <p className="text-[10px] text-amber-300 font-['Chakra_Petch'] mt-1">
+                  ⚠️ No hay atributos en el catálogo. Añádelos desde el admin.
+                </p>
+              )}
+            </div>
+
+            {/* Razas (multi-select con chips) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-['Press_Start_2P'] text-slate-300">
+                  Razas:
+                </label>
+                <span className="text-[10px] font-['Chakra_Petch'] text-slate-500">
+                  {races.length} / {MAX_RACES}
+                </span>
+              </div>
+              {racesList.length === 0 ? (
+                <p className="text-[10px] text-amber-300 font-['Chakra_Petch'] p-2 bg-black/40 rounded">
+                  ⚠️ No hay razas en el catálogo. Añádelas desde el admin.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {racesList.map((r) => {
+                    const isActive = races.includes(r.value);
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => toggleRace(r.value)}
+                        aria-pressed={isActive}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-['Chakra_Petch'] font-bold border-2 transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                          isActive
+                            ? "bg-cyan-400 text-black border-black shadow-[2px_2px_0_#000]"
+                            : "bg-slate-800 border-slate-600 text-slate-300 hover:border-cyan-400"
+                        }`}
+                      >
+                        {r.value}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Traits (multi-select con chips) */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-['Press_Start_2P'] text-slate-300">
+                  Características:
+                </label>
+                <span className="text-[10px] font-['Chakra_Petch'] text-slate-500">
+                  {traits.length} / {MAX_TRAITS}
+                </span>
+              </div>
+              {traitsList.length === 0 ? (
+                <p className="text-[10px] text-amber-300 font-['Chakra_Petch'] p-2 bg-black/40 rounded">
+                  ⚠️ No hay características en el catálogo. Añádelas desde el
+                  admin.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1">
+                  {traitsList.map((t) => {
+                    const isActive = traits.includes(t.value);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => toggleTrait(t.value)}
+                        aria-pressed={isActive}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-['Chakra_Petch'] font-bold border transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                          isActive
+                            ? "bg-fuchsia-500 text-white border-fuchsia-300"
+                            : "bg-slate-800 border-slate-600 text-slate-300 hover:border-fuchsia-400"
+                        }`}
+                      >
+                        {t.value}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Imagen — selector URL / Subir */}
@@ -423,7 +563,6 @@ export default function CharacterFormModal({
               Imagen del Personaje:
             </span>
 
-            {/* Toggle de modo */}
             <div
               role="tablist"
               aria-label="Modo de imagen"
@@ -432,7 +571,6 @@ export default function CharacterFormModal({
               <button
                 type="button"
                 role="tab"
-                id="tab-image-url"
                 aria-selected={imageMode === "url"}
                 onClick={() => setImageMode("url")}
                 className={`flex-1 py-1.5 px-3 rounded-lg border-2 font-['Chakra_Petch'] font-bold text-xs flex items-center justify-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
@@ -447,7 +585,6 @@ export default function CharacterFormModal({
               <button
                 type="button"
                 role="tab"
-                id="tab-image-upload"
                 aria-selected={imageMode === "upload"}
                 onClick={() => setImageMode("upload")}
                 className={`flex-1 py-1.5 px-3 rounded-lg border-2 font-['Chakra_Petch'] font-bold text-xs flex items-center justify-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
@@ -461,13 +598,10 @@ export default function CharacterFormModal({
               </button>
             </div>
 
-            {/* Modo URL */}
             {imageMode === "url" && (
               <>
                 <input
                   type="url"
-                  id="input-char-image-url"
-                  name="input-char-image-url"
                   value={imageUrl}
                   onChange={(e) => handleUrlChange(e.target.value)}
                   placeholder="https://..."
@@ -476,7 +610,7 @@ export default function CharacterFormModal({
 
                 <div className="mt-2">
                   <span className="text-[10px] text-slate-400 font-['Chakra_Petch'] block mb-1">
-                    O elige una imagen rápida de demostración:
+                    O elige una imagen rápida:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {PRESET_IMAGES.map((preset) => (
@@ -494,7 +628,6 @@ export default function CharacterFormModal({
               </>
             )}
 
-            {/* Modo Upload */}
             {imageMode === "upload" && (
               <>
                 {!imageFile ? (
@@ -510,7 +643,6 @@ export default function CharacterFormModal({
                     }}
                     role="button"
                     tabIndex={0}
-                    aria-label="Arrastra una imagen o haz click para seleccionar"
                     className="border-2 border-dashed border-slate-600 hover:border-emerald-400 rounded-xl p-6 text-center cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-emerald-400 bg-black/30"
                   >
                     <Upload
@@ -518,7 +650,7 @@ export default function CharacterFormModal({
                       aria-hidden="true"
                     />
                     <p className="text-xs font-['Chakra_Petch'] text-slate-300">
-                      Arrastra una imagen o{" "}
+                      Arrastra o{" "}
                       <span className="text-emerald-400 font-bold">
                         haz click para seleccionar
                       </span>
@@ -529,8 +661,6 @@ export default function CharacterFormModal({
                     <input
                       ref={fileInputRef}
                       type="file"
-                      id="input-char-image-file"
-                      name="input-char-image-file"
                       accept="image/png,image/jpeg,image/webp,image/gif"
                       onChange={handleFileInputChange}
                       className="hidden"
@@ -554,8 +684,6 @@ export default function CharacterFormModal({
                     </div>
                     <button
                       type="button"
-                      id="btn-remove-file"
-                      name="btn-remove-file"
                       onClick={handleRemoveFile}
                       aria-label="Quitar archivo seleccionado"
                       className="p-1.5 rounded hover:bg-white/10 text-rose-400 focus:outline-none focus:ring-2 focus:ring-rose-400"
@@ -567,12 +695,11 @@ export default function CharacterFormModal({
               </>
             )}
 
-            {/* Preview */}
             {imagePreview && (
               <div className="mt-3 flex items-center gap-3 p-2 bg-black/50 border border-slate-700 rounded-xl">
                 <img
                   src={imagePreview}
-                  alt="Vista previa del avatar"
+                  alt="Vista previa"
                   className="w-16 h-16 rounded-lg object-cover border border-yellow-400 bg-slate-900"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
@@ -580,7 +707,7 @@ export default function CharacterFormModal({
                   }}
                 />
                 <div className="text-xs font-['Chakra_Petch'] text-slate-400">
-                  Vista previa del avatar que verán los jugadores.
+                  Vista previa del avatar.
                 </div>
               </div>
             )}
@@ -597,7 +724,6 @@ export default function CharacterFormModal({
             <input
               type="text"
               id="input-char-description"
-              name="input-char-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Ej: Asesina veloz con ataques críticos"
@@ -610,16 +736,11 @@ export default function CharacterFormModal({
           <div className="flex gap-3 pt-3">
             <button
               type="submit"
-              id="btn-save-character"
-              name="btn-save-character"
               disabled={submitting}
-              className="flex-1 py-3 px-4 bg-yellow-400 hover:bg-yellow-300 active:translate-y-0.5 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] transition flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-200 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex-1 py-3 px-4 bg-yellow-400 hover:bg-yellow-300 active:translate-y-0.5 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] transition flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-200 disabled:opacity-60"
             >
               {submitting && (
-                <Loader2
-                  className="w-4 h-4 animate-spin"
-                  aria-hidden="true"
-                />
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               )}
               <span>
                 {submitting
@@ -633,8 +754,6 @@ export default function CharacterFormModal({
             </button>
             <button
               type="button"
-              id="btn-cancel-character"
-              name="btn-cancel-character"
               onClick={onClose}
               disabled={submitting}
               className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-['Press_Start_2P'] text-xs rounded-xl border-2 border-slate-600 transition focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:opacity-50"

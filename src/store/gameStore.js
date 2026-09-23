@@ -28,6 +28,11 @@ import {
   deleteAllCharacters,
 } from "../services/characterService";
 import {
+  listCatalogs,
+  addCatalogItem,
+  deleteCatalogItem,
+} from "../services/catalogService";
+import {
   supabase,
   isSupabaseConfigured,
   CLIENT_ID,
@@ -61,6 +66,12 @@ const EMPTY_STATE = {
   characterPool: { available: [], used: [], discarded: [] },
   roundVotes: { player1: null, player2: null },
   mySlot: null,
+  // Catálogos de atributos / razas / traits
+  catalogs: {
+    attributes: [],
+    races: [],
+    traits: [],
+  },
 };
 
 // ============================================================================
@@ -87,10 +98,14 @@ export const useGameStore = create((set, get) => ({
     try {
       set({ loading: true, error: null });
       const game = await getOrCreateMainGame();
-      const snapshot = await fetchGameSnapshot(game.id);
+      const [snapshot, catalogs] = await Promise.all([
+        fetchGameSnapshot(game.id),
+        listCatalogs(),
+      ]);
 
       set({
         ...snapshot,
+        catalogs,
         loading: false,
       });
 
@@ -198,6 +213,12 @@ export const useGameStore = create((set, get) => ({
         { event: "*", schema: "public", table: "game_inventory", filter: `game_id=eq.${gameId}` },
         () => get().refreshSnapshot()
       )
+      // Catálogos → refrescar en vivo
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "catalogs" },
+        () => get().refreshCatalogs()
+      )
       .subscribe();
 
     set({ realtimeChannel: channel });
@@ -233,6 +254,30 @@ export const useGameStore = create((set, get) => ({
         setTimeout(() => get().refreshSnapshot(), 0);
       }
     }
+  },
+
+  // --------------------------------------------------------------------------
+  // CATÁLOGOS (attributes / races / traits)
+  // --------------------------------------------------------------------------
+  async refreshCatalogs() {
+    try {
+      const catalogs = await listCatalogs();
+      set({ catalogs });
+    } catch (err) {
+      console.warn("[refreshCatalogs]", err);
+    }
+  },
+
+  async addCatalogItem(category, value) {
+    const trimmed = (value || "").trim();
+    if (!trimmed) return;
+    await addCatalogItem(category, trimmed);
+    await get().refreshCatalogs();
+  },
+
+  async removeCatalogItem(id) {
+    await deleteCatalogItem(id);
+    await get().refreshCatalogs();
   },
 
   // --------------------------------------------------------------------------
@@ -456,9 +501,7 @@ export const useGameStore = create((set, get) => ({
   },
 
   // --------------------------------------------------------------------------
-  // NUEVO: ADMIN RESET GAME
-  // Resetea el estado de la partida sin pedir confirmación a los jugadores.
-  // NO borra personajes. Solo reinicia pool, inventarios, monedas, subasta.
+  // ADMIN RESET GAME
   // --------------------------------------------------------------------------
   async adminResetGame() {
     const gameId = get().game?.id;
@@ -513,3 +556,8 @@ export const selectCanStartAuction = (state) =>
 export const selectCanAdvanceRound = (state) =>
   (state.players.player1?.inventory?.length || 0) >= MAX_INVENTORY_SLOTS &&
   (state.players.player2?.inventory?.length || 0) >= MAX_INVENTORY_SLOTS;
+
+// Selectores de catálogos
+export const selectAttributes = (state) => state.catalogs.attributes;
+export const selectRaces = (state) => state.catalogs.races;
+export const selectTraits = (state) => state.catalogs.traits;

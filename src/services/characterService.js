@@ -1,6 +1,30 @@
 import { supabase, unwrap, isSupabaseConfigured } from "./supabaseClient";
 
 // ============================================================================
+// HELPERS
+// ============================================================================
+function sanitizeRaces(races) {
+  if (!Array.isArray(races)) return [];
+  return races
+    .map((r) => (typeof r === "string" ? r.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 3); // Máximo 3 razas
+}
+
+function sanitizeTraits(traits) {
+  if (!Array.isArray(traits)) return [];
+  return traits
+    .map((t) => (typeof t === "string" ? t.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 7); // Máximo 7 traits
+}
+
+function sanitizeAttribute(attribute) {
+  if (typeof attribute !== "string") return "Desconocido";
+  return attribute.trim() || "Desconocido";
+}
+
+// ============================================================================
 // LISTAR
 // ============================================================================
 export async function listCharacters() {
@@ -38,6 +62,10 @@ export async function createCharacter(input, gameId = null) {
     description: (input.description || "").trim(),
     weight: parseInt(input.weight, 10) || defaultWeightForRarity(input.rarity),
     is_default: false,
+    // ⚠️ NUEVO: campos del #8
+    attribute: sanitizeAttribute(input.attribute),
+    races: sanitizeRaces(input.races),
+    traits: sanitizeTraits(input.traits),
   };
 
   // 1. Insertar personaje en el catálogo global
@@ -56,7 +84,6 @@ export async function createCharacter(input, gameId = null) {
         })
       );
     } catch (err) {
-      // Si falla el insert al pool, al menos el personaje ya está creado
       console.warn("[characterService] No se pudo añadir al pool:", err);
     }
   }
@@ -76,6 +103,10 @@ export async function updateCharacter(id, input) {
     acceptance: Math.max(0, parseInt(input.acceptance, 10) || 0),
     image_url: (input.image_url || "").trim(),
     description: (input.description || "").trim(),
+    // ⚠️ NUEVO: campos del #8
+    attribute: sanitizeAttribute(input.attribute),
+    races: sanitizeRaces(input.races),
+    traits: sanitizeTraits(input.traits),
   };
   if (input.weight != null) {
     payload.weight =
@@ -98,8 +129,6 @@ export async function updateCharacter(id, input) {
 // ============================================================================
 export async function deleteCharacter(id) {
   if (!isSupabaseConfigured) throw new Error("Supabase no configurado");
-  // Gracias a ON DELETE CASCADE en las FK, también se borra
-  // automáticamente de game_pool, game_inventory y game_auction.
   unwrap(await supabase.from("characters").delete().eq("id", id));
 }
 
@@ -120,9 +149,12 @@ export async function seedDefaultCharacters(gameId = null) {
     description: c.description,
     weight: defaultWeightForRarity(c.rarity),
     is_default: true,
+    // Los defaults no tienen atributo/raza/trait (los editas después)
+    attribute: "Desconocido",
+    races: [],
+    traits: [],
   }));
 
-  // 1. Upsert en el catálogo global
   const data = unwrap(
     await supabase
       .from("characters")
@@ -130,7 +162,6 @@ export async function seedDefaultCharacters(gameId = null) {
       .select()
   );
 
-  // 2. Si nos dan gameId, meterlos también en el pool de esa partida
   if (gameId && data && data.length) {
     const poolRows = data.map((c) => ({
       game_id: gameId,
@@ -163,7 +194,6 @@ export async function seedDefaultCharacters(gameId = null) {
 // ============================================================================
 export async function deleteAllCharacters() {
   if (!isSupabaseConfigured) throw new Error("Supabase no configurado");
-  // CASCADE limpia también game_pool, game_inventory y game_auction.
   unwrap(await supabase.from("characters").delete().neq("id", "___never___"));
 }
 

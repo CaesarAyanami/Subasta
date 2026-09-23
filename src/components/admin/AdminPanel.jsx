@@ -17,6 +17,7 @@ import {
   RotateCcw,
   X,
   Package,
+  Tag,
 } from "lucide-react";
 import CharacterFormModal from "./CharacterFormModal";
 import { RARITY_CONFIG } from "../auction/CharacterCard";
@@ -27,15 +28,19 @@ import sounds from "../../services/soundEffects";
 // ============================================================================
 const ALL_RARITIES = ["R", "SR", "SSR", "UR", "LR"];
 
-const COMING_SOON_FILTERS = [
-  { id: "attribute", label: "Atributo" },
-  { id: "race", label: "Raza" },
-  { id: "trait", label: "Característica" },
+const CATALOG_TABS = [
+  { id: "attribute", label: "Atributos", color: "yellow" },
+  { id: "race", label: "Razas", color: "cyan" },
+  { id: "trait", label: "Características", color: "fuchsia" },
 ];
 
+// ============================================================================
+// COMPONENTE
+// ============================================================================
 export default function AdminPanel({
   settings,
   characterPool,
+  catalogs,
   onUpdateSettings,
   onAddCharacter,
   onEditCharacter,
@@ -43,6 +48,8 @@ export default function AdminPanel({
   onResetDatabase,
   onSeedDefaultCharacters,
   onAdminReset,
+  onAddCatalogItem,
+  onRemoveCatalogItem,
   showToast,
 }) {
   // ==========================================================================
@@ -77,6 +84,13 @@ export default function AdminPanel({
   const [rarityFilter, setRarityFilter] = useState([]);
   const [minAcceptance, setMinAcceptance] = useState("");
   const [maxAcceptance, setMaxAcceptance] = useState("");
+  const [attributeFilter, setAttributeFilter] = useState("");
+  const [raceFilter, setRaceFilter] = useState("");
+  const [traitFilter, setTraitFilter] = useState("");
+
+  // Catálogos - input para añadir
+  const [newCatalogValue, setNewCatalogValue] = useState("");
+  const [catalogSubTab, setCatalogSubTab] = useState("attribute");
 
   // ==========================================================================
   // SINCRONIZAR SETTINGS
@@ -100,6 +114,11 @@ export default function AdminPanel({
   const used = characterPool?.used || [];
   const discarded = characterPool?.discarded || [];
   const totalCharacters = available.length + used.length + discarded.length;
+
+  // Catálogos normalizados
+  const attributesList = catalogs?.attributes || [];
+  const racesList = catalogs?.races || [];
+  const traitsList = catalogs?.traits || [];
 
   // ==========================================================================
   // FILTRADO
@@ -125,20 +144,50 @@ export default function AdminPanel({
       result = result.filter((c) => (c.acceptance ?? 0) <= max);
     }
 
+    // Filtros nuevos del #8
+    if (attributeFilter) {
+      result = result.filter((c) => c.attribute === attributeFilter);
+    }
+    if (raceFilter) {
+      result = result.filter(
+        (c) => Array.isArray(c.races) && c.races.includes(raceFilter)
+      );
+    }
+    if (traitFilter) {
+      result = result.filter(
+        (c) => Array.isArray(c.traits) && c.traits.includes(traitFilter)
+      );
+    }
+
     return result;
-  }, [available, searchQuery, rarityFilter, minAcceptance, maxAcceptance]);
+  }, [
+    available,
+    searchQuery,
+    rarityFilter,
+    minAcceptance,
+    maxAcceptance,
+    attributeFilter,
+    raceFilter,
+    traitFilter,
+  ]);
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
     rarityFilter.length > 0 ||
     minAcceptance !== "" ||
-    maxAcceptance !== "";
+    maxAcceptance !== "" ||
+    attributeFilter !== "" ||
+    raceFilter !== "" ||
+    traitFilter !== "";
 
   const clearFilters = () => {
     setSearchQuery("");
     setRarityFilter([]);
     setMinAcceptance("");
     setMaxAcceptance("");
+    setAttributeFilter("");
+    setRaceFilter("");
+    setTraitFilter("");
     sounds.playClick();
   };
 
@@ -277,6 +326,34 @@ export default function AdminPanel({
   };
 
   // ==========================================================================
+  // HANDLERS — CATÁLOGOS
+  // ==========================================================================
+  const handleAddCatalogItem = async () => {
+    const value = newCatalogValue.trim();
+    if (!value) return;
+    sounds.playClick();
+    try {
+      await onAddCatalogItem(catalogSubTab, value);
+      setNewCatalogValue("");
+      showToast?.("AÑADIDO", `"${value}" agregado`, "sparkles", 2000);
+    } catch (err) {
+      console.error("[AdminPanel.handleAddCatalogItem]", err);
+      showToast?.("ERROR", err.message || "No se pudo añadir", "warning", 3500);
+    }
+  };
+
+  const handleRemoveCatalogItem = async (item) => {
+    sounds.playDiscard();
+    try {
+      await onRemoveCatalogItem(item.id);
+      showToast?.("ELIMINADO", `"${item.value}" eliminado`, "warning", 2000);
+    } catch (err) {
+      console.error("[AdminPanel.handleRemoveCatalogItem]", err);
+      showToast?.("ERROR", err.message || "No se pudo eliminar", "warning", 3500);
+    }
+  };
+
+  // ==========================================================================
   // RENDER
   // ==========================================================================
   return (
@@ -296,7 +373,7 @@ export default function AdminPanel({
         </span>
       </div>
 
-      {/* Cabecera */}
+      {/* Cabecera con tabs */}
       <div className="bg-[#151928] border-4 border-cyan-400 rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#0891b2] flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -306,21 +383,18 @@ export default function AdminPanel({
             </h1>
           </div>
           <p className="text-xs sm:text-sm font-['Chakra_Petch'] text-slate-300">
-            Gestión completa del pool de personajes, reglas de subasta y
-            animaciones de gacha.
+            Gestión completa del pool, catálogos y reglas del juego.
           </p>
         </div>
 
         <div
           role="tablist"
           aria-label="Secciones del panel"
-          className="flex items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700"
+          className="flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700"
         >
           <button
             type="button"
             role="tab"
-            id="admin-tab-characters"
-            name="admin-tab-characters"
             aria-selected={activeTab === "characters"}
             onClick={() => setActiveTab("characters")}
             className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
@@ -334,8 +408,19 @@ export default function AdminPanel({
           <button
             type="button"
             role="tab"
-            id="admin-tab-settings"
-            name="admin-tab-settings"
+            aria-selected={activeTab === "catalogs"}
+            onClick={() => setActiveTab("catalogs")}
+            className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+              activeTab === "catalogs"
+                ? "bg-purple-400 text-black shadow-[2px_2px_0_#000]"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Catálogos
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === "settings"}
             onClick={() => setActiveTab("settings")}
             className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
@@ -349,127 +434,101 @@ export default function AdminPanel({
         </div>
       </div>
 
-      {/* Acciones rápidas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <button
-          type="button"
-          id="btn-admin-add"
-          name="btn-admin-add"
-          onClick={handleOpenAddModal}
-          className="p-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-        >
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          <span>AGREGAR</span>
-        </button>
+      {/* Acciones rápidas (solo en pestaña personajes) */}
+      {activeTab === "characters" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="p-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+          >
+            <Plus className="w-4 h-4" aria-hidden="true" />
+            <span>AGREGAR</span>
+          </button>
 
-        <button
-          type="button"
-          id="btn-admin-seed"
-          name="btn-admin-seed"
-          onClick={handleSeed}
-          disabled={isSeeding}
-          title="Carga 12 personajes preparados con diferentes rarezas para probar"
-          aria-label="Cargar 12 personajes de ejemplo"
-          className="p-3.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {isSeeding ? (
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={handleSeed}
+            disabled={isSeeding}
+            className="p-3.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isSeeding ? (
+              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="w-4 h-4" aria-hidden="true" />
+            )}
+            <span>{isSeeding ? "CARGANDO..." : "SEED"}</span>
+          </button>
+
+          {showResetConfirm ? (
+            <div className="flex gap-2" role="alertdialog">
+              <button
+                type="button"
+                onClick={handleAdminReset}
+                disabled={isResetting}
+                className="flex-1 p-3 bg-amber-500 hover:bg-amber-400 rounded-xl border-4 border-black text-black font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60"
+              >
+                {isResetting ? "RESET..." : "¿RESET?"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs"
+              >
+                No
+              </button>
+            </div>
           ) : (
-            <Download className="w-4 h-4" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={() => {
+                sounds.playClick();
+                setShowResetConfirm(true);
+              }}
+              className="p-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300"
+            >
+              <RotateCcw className="w-4 h-4" aria-hidden="true" />
+              <span>RESET PARTIDA</span>
+            </button>
           )}
-          <span>{isSeeding ? "CARGANDO..." : "SEED"}</span>
-        </button>
 
-        {showResetConfirm ? (
-          <div
-            className="flex gap-2"
-            role="alertdialog"
-            aria-label="Confirmar reset de partida"
-          >
+          {showCleanConfirm ? (
+            <div className="flex gap-2" role="alertdialog">
+              <button
+                type="button"
+                onClick={handleCleanDb}
+                disabled={isWiping}
+                className="flex-1 p-3 bg-rose-600 hover:bg-rose-500 rounded-xl border-4 border-black text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60"
+              >
+                {isWiping ? "BORRANDO..." : "¿BORRAR DB?"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCleanConfirm(false)}
+                className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs"
+              >
+                No
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
-              id="btn-admin-confirm-reset"
-              name="btn-admin-confirm-reset"
-              onClick={handleAdminReset}
-              disabled={isResetting}
-              className="flex-1 p-3 bg-amber-500 hover:bg-amber-400 rounded-xl border-4 border-black text-black font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60"
+              onClick={() => {
+                sounds.playClick();
+                setShowCleanConfirm(true);
+              }}
+              className="p-3.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-white font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-rose-300"
             >
-              {isResetting ? "RESET..." : "¿RESET?"}
+              <Trash2 className="w-4 h-4 text-yellow-300" aria-hidden="true" />
+              <span>BORRAR DB</span>
             </button>
-            <button
-              type="button"
-              id="btn-admin-cancel-reset"
-              name="btn-admin-cancel-reset"
-              onClick={() => setShowResetConfirm(false)}
-              className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            id="btn-admin-reset"
-            name="btn-admin-reset"
-            onClick={() => {
-              sounds.playClick();
-              setShowResetConfirm(true);
-            }}
-            title="Reinicia el estado de la partida SIN borrar personajes"
-            aria-label="Resetear partida (mantiene personajes)"
-            className="p-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300"
-          >
-            <RotateCcw className="w-4 h-4" aria-hidden="true" />
-            <span>RESET PARTIDA</span>
-          </button>
-        )}
+          )}
+        </div>
+      )}
 
-        {showCleanConfirm ? (
-          <div
-            className="flex gap-2"
-            role="alertdialog"
-            aria-label="Confirmar limpieza total"
-          >
-            <button
-              type="button"
-              id="btn-admin-confirm-wipe"
-              name="btn-admin-confirm-wipe"
-              onClick={handleCleanDb}
-              disabled={isWiping}
-              className="flex-1 p-3 bg-rose-600 hover:bg-rose-500 rounded-xl border-4 border-black text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60"
-            >
-              {isWiping ? "BORRANDO..." : "¿BORRAR DB?"}
-            </button>
-            <button
-              type="button"
-              id="btn-admin-cancel-wipe"
-              name="btn-admin-cancel-wipe"
-              onClick={() => setShowCleanConfirm(false)}
-              className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
-            >
-              No
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            id="btn-admin-wipe"
-            name="btn-admin-wipe"
-            onClick={() => {
-              sounds.playClick();
-              setShowCleanConfirm(true);
-            }}
-            title="Borra TODOS los personajes del catálogo (irreversible)"
-            aria-label="Borrar todos los personajes del catálogo"
-            className="p-3.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-white font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-rose-300"
-          >
-            <Trash2 className="w-4 h-4 text-yellow-300" aria-hidden="true" />
-            <span>BORRAR DB</span>
-          </button>
-        )}
-      </div>
-
-      {/* TAB: PERSONAJES */}
+      {/* ====================================================================
+          TAB: PERSONAJES
+          ==================================================================== */}
       {activeTab === "characters" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
@@ -479,15 +538,13 @@ export default function AdminPanel({
                 {hasActiveFilters ? ` / ${available.length}` : ""} DISPONIBLES)
               </h2>
               <p className="text-xs text-slate-400 font-['Chakra_Petch']">
-                Total cargados: {totalCharacters} | Usados: {used.length} |
-                Desechados: {discarded.length}
+                Total: {totalCharacters} | Usados: {used.length} | Desechados:{" "}
+                {discarded.length}
               </p>
             </div>
 
             <button
               type="button"
-              id="btn-admin-new"
-              name="btn-admin-new"
               onClick={handleOpenAddModal}
               className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-black text-xs font-['Press_Start_2P'] rounded-lg border-2 border-black flex items-center gap-1.5 shadow-[2px_2px_0_#000] focus:outline-none focus:ring-2 focus:ring-yellow-200"
             >
@@ -496,7 +553,7 @@ export default function AdminPanel({
             </button>
           </div>
 
-          {/* ZONA DE FILTROS */}
+          {/* FILTROS */}
           <div className="space-y-3 bg-black/30 border-2 border-slate-800 rounded-xl p-3">
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative flex-1 min-w-[200px]">
@@ -506,8 +563,6 @@ export default function AdminPanel({
                 />
                 <input
                   type="text"
-                  id="admin-search"
-                  name="admin-search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Buscar personaje por nombre..."
@@ -519,8 +574,6 @@ export default function AdminPanel({
               {hasActiveFilters && (
                 <button
                   type="button"
-                  id="btn-admin-clear-filters"
-                  name="btn-admin-clear-filters"
                   onClick={clearFilters}
                   aria-label="Limpiar todos los filtros"
                   className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 rounded-lg text-xs font-['Chakra_Petch'] text-slate-200 flex items-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-rose-400"
@@ -532,6 +585,7 @@ export default function AdminPanel({
             </div>
 
             <div className="flex flex-wrap gap-3 items-center">
+              {/* Rarezas */}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
                   Rareza:
@@ -543,11 +597,8 @@ export default function AdminPanel({
                     <button
                       key={r}
                       type="button"
-                      id={`btn-filter-rarity-${r}`}
-                      name={`btn-filter-rarity-${r}`}
                       onClick={() => toggleRarity(r)}
                       aria-pressed={isActive}
-                      aria-label={`Filtrar por rareza ${r}`}
                       className={`px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
                         isActive
                           ? `${cfg.badgeClass} scale-105`
@@ -560,14 +611,13 @@ export default function AdminPanel({
                 })}
               </div>
 
+              {/* Aceptación */}
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
                   Acept:
                 </span>
                 <input
                   type="number"
-                  id="admin-acceptance-min"
-                  name="admin-acceptance-min"
                   min="0"
                   max="20"
                   value={minAcceptance}
@@ -579,8 +629,6 @@ export default function AdminPanel({
                 <span className="text-slate-500 text-xs">–</span>
                 <input
                   type="number"
-                  id="admin-acceptance-max"
-                  name="admin-acceptance-max"
                   min="0"
                   max="20"
                   value={maxAcceptance}
@@ -591,19 +639,64 @@ export default function AdminPanel({
                 />
               </div>
 
-              <div className="flex items-center gap-1.5 ml-auto">
-                {COMING_SOON_FILTERS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    disabled
-                    title={`Filtro por ${f.label} (próximamente)`}
-                    aria-label={`Filtro por ${f.label} próximamente`}
-                    className="px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 border-slate-800 bg-slate-900/60 text-slate-600 cursor-not-allowed"
-                  >
-                    {f.label}
-                  </button>
-                ))}
+              {/* Atributo */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
+                  Atrib:
+                </span>
+                <select
+                  value={attributeFilter}
+                  onChange={(e) => setAttributeFilter(e.target.value)}
+                  aria-label="Filtrar por atributo"
+                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+                >
+                  <option value="">Todos</option>
+                  {attributesList.map((a) => (
+                    <option key={a.id} value={a.value}>
+                      {a.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Raza */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
+                  Raza:
+                </span>
+                <select
+                  value={raceFilter}
+                  onChange={(e) => setRaceFilter(e.target.value)}
+                  aria-label="Filtrar por raza"
+                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+                >
+                  <option value="">Todas</option>
+                  {racesList.map((r) => (
+                    <option key={r.id} value={r.value}>
+                      {r.value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Trait */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
+                  Caract:
+                </span>
+                <select
+                  value={traitFilter}
+                  onChange={(e) => setTraitFilter(e.target.value)}
+                  aria-label="Filtrar por característica"
+                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none max-w-[140px]"
+                >
+                  <option value="">Todas</option>
+                  {traitsList.map((t) => (
+                    <option key={t.id} value={t.value}>
+                      {t.value}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -620,11 +713,9 @@ export default function AdminPanel({
               </p>
               <button
                 type="button"
-                id="btn-admin-seed-empty"
-                name="btn-admin-seed-empty"
                 onClick={handleSeed}
                 disabled={isSeeding}
-                className="px-4 py-2 bg-cyan-400 hover:bg-cyan-300 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-cyan-200 disabled:opacity-60"
+                className="px-4 py-2 bg-cyan-400 hover:bg-cyan-300 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] disabled:opacity-60"
               >
                 {isSeeding ? "Cargando..." : "Cargar Personajes Iniciales"}
               </button>
@@ -641,7 +732,7 @@ export default function AdminPanel({
               <button
                 type="button"
                 onClick={clearFilters}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-['Chakra_Petch'] text-xs rounded-xl border-2 border-slate-600 shadow-[3px_3px_0_#000]"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-['Chakra_Petch'] text-xs rounded-xl border-2 border-slate-600"
               >
                 Limpiar filtros
               </button>
@@ -651,6 +742,8 @@ export default function AdminPanel({
               {filteredAvailable.map((char) => {
                 const config = RARITY_CONFIG[char.rarity || "R"];
                 const imgSrc = char.image_url || char.imageUrl || "";
+                const races = Array.isArray(char.races) ? char.races : [];
+                const traits = Array.isArray(char.traits) ? char.traits : [];
                 return (
                   <div
                     key={char.id}
@@ -685,14 +778,37 @@ export default function AdminPanel({
                         <h4 className="font-['Press_Start_2P'] text-xs text-white truncate drop-shadow-[1px_1px_0_#000]">
                           {char.name}
                         </h4>
+                        {/* Info extra (atributo/razas) */}
+                        {(char.attribute && char.attribute !== "Desconocido") ||
+                        races.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {char.attribute &&
+                              char.attribute !== "Desconocido" && (
+                                <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 border border-yellow-500/50 text-[9px] font-['Chakra_Petch'] text-yellow-300">
+                                  {char.attribute}
+                                </span>
+                              )}
+                            {races.slice(0, 2).map((r) => (
+                              <span
+                                key={r}
+                                className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/50 text-[9px] font-['Chakra_Petch'] text-cyan-300"
+                              >
+                                {r}
+                              </span>
+                            ))}
+                            {races.length > 2 && (
+                              <span className="text-[9px] text-slate-500">
+                                +{races.length - 2}
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="flex items-center justify-end gap-2 border-t border-slate-700/60 pt-2">
                       <button
                         type="button"
-                        id={`btn-edit-${char.id}`}
-                        name={`btn-edit-${char.id}`}
                         onClick={() => handleOpenEditModal(char)}
                         aria-label={`Editar ${char.name}`}
                         className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-['Chakra_Petch'] font-bold flex items-center gap-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400"
@@ -702,8 +818,6 @@ export default function AdminPanel({
                       </button>
                       <button
                         type="button"
-                        id={`btn-delete-${char.id}`}
-                        name={`btn-delete-${char.id}`}
                         onClick={() => handleDelete(char)}
                         disabled={deletingId === char.id}
                         aria-label={`Eliminar ${char.name}`}
@@ -725,7 +839,150 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* TAB: AJUSTES */}
+      {/* ====================================================================
+          TAB: CATÁLOGOS
+          ==================================================================== */}
+      {activeTab === "catalogs" && (
+        <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
+          <div className="border-b-2 border-slate-800 pb-3">
+            <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-purple-400">
+              CATÁLOGOS
+            </h2>
+            <p className="text-xs text-slate-400 font-['Chakra_Petch']">
+              Gestiona los valores disponibles para asignar a los personajes.
+              Los cambios se sincronizan en tiempo real.
+            </p>
+          </div>
+
+          {/* Sub-tabs: Atributos / Razas / Traits */}
+          <div
+            role="tablist"
+            className="flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700"
+          >
+            {CATALOG_TABS.map((t) => {
+              const counts = {
+                attribute: attributesList.length,
+                race: racesList.length,
+                trait: traitsList.length,
+              };
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={catalogSubTab === t.id}
+                  onClick={() => {
+                    sounds.playClick();
+                    setCatalogSubTab(t.id);
+                    setNewCatalogValue("");
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                    catalogSubTab === t.id
+                      ? "bg-purple-400 text-black shadow-[2px_2px_0_#000]"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {t.label} ({counts[t.id]})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Input para añadir */}
+          <div className="flex gap-2 items-stretch">
+            <input
+              type="text"
+              value={newCatalogValue}
+              onChange={(e) => setNewCatalogValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddCatalogItem();
+                }
+              }}
+              placeholder={
+                catalogSubTab === "attribute"
+                  ? "Nuevo atributo (ej: Luz)"
+                  : catalogSubTab === "race"
+                  ? "Nueva raza (ej: Hadas)"
+                  : "Nueva característica (ej: Rey)"
+              }
+              aria-label="Nuevo valor de catálogo"
+              maxLength={40}
+              className="flex-1 px-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-purple-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-purple-400/40"
+            />
+            <button
+              type="button"
+              onClick={handleAddCatalogItem}
+              disabled={!newCatalogValue.trim()}
+              className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-black font-['Press_Start_2P'] text-xs rounded-lg border-2 border-black shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Añadir</span>
+            </button>
+          </div>
+
+          {/* Lista de items */}
+          {(() => {
+            const items =
+              catalogSubTab === "attribute"
+                ? attributesList
+                : catalogSubTab === "race"
+                ? racesList
+                : traitsList;
+
+            if (items.length === 0) {
+              return (
+                <div className="text-center py-8 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
+                  <Tag
+                    className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60"
+                    aria-hidden="true"
+                  />
+                  <p className="font-['Chakra_Petch'] text-xs text-slate-500">
+                    No hay valores. Añade el primero arriba.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 px-3 py-2 bg-black/40 border-2 border-slate-700 rounded-lg group hover:border-purple-400/60 transition"
+                  >
+                    <span className="font-['Chakra_Petch'] text-sm text-white truncate">
+                      {item.value}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCatalogItem(item)}
+                      aria-label={`Eliminar ${item.value}`}
+                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition focus:outline-none focus:ring-2 focus:ring-rose-400 flex-shrink-0"
+                    >
+                      <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Nota */}
+          <div className="p-3 bg-amber-950/40 border border-amber-600/60 rounded-xl">
+            <p className="text-[11px] font-['Chakra_Petch'] text-amber-200">
+              ⚠️ <strong>Nota:</strong> Eliminar un valor del catálogo NO lo
+              quita de los personajes que ya lo tengan asignado. Edita los
+              personajes manualmente si necesitas cambiarlos.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ====================================================================
+          TAB: AJUSTES
+          ==================================================================== */}
       {activeTab === "settings" && (
         <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000]">
           <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400 mb-4 border-b-2 border-slate-800 pb-3">
@@ -745,7 +1002,6 @@ export default function AdminPanel({
               <input
                 type="number"
                 id="input-initial-coins"
-                name="input-initial-coins"
                 min="5"
                 max="999"
                 value={initialCoins}
@@ -753,8 +1009,7 @@ export default function AdminPanel({
                 className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-yellow-400 outline-none focus:ring-2 focus:ring-yellow-400/40"
               />
               <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Por defecto: 20 monedas. Al reiniciar o cambiar de ronda, los
-                jugadores vuelven a este saldo.
+                Por defecto: 20 monedas.
               </p>
             </div>
 
@@ -770,7 +1025,6 @@ export default function AdminPanel({
               <input
                 type="number"
                 id="input-auction-time"
-                name="input-auction-time"
                 min="5"
                 max="120"
                 value={auctionTime}
@@ -778,11 +1032,11 @@ export default function AdminPanel({
                 className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-400/40"
               />
               <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Por defecto: 20 segundos. Tiempo del cronómetro de pujas.
+                Por defecto: 20 segundos.
               </p>
             </div>
 
-            {/* ⚠️ NUEVO: máximo de subastas por ronda */}
+            {/* Máximo de subastas */}
             <div>
               <label
                 htmlFor="input-max-auctions"
@@ -794,7 +1048,6 @@ export default function AdminPanel({
               <input
                 type="number"
                 id="input-max-auctions"
-                name="input-max-auctions"
                 min="1"
                 max="200"
                 value={maxAuctionsPerRound}
@@ -802,8 +1055,7 @@ export default function AdminPanel({
                 className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-emerald-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-400/40"
               />
               <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Máximo de subastas antes de que la ronda se bloquee
-                automáticamente. Recomendado: 20. Rango: 1-200.
+                Máximo de subastas antes de bloquear la ronda. Recomendado: 20.
               </p>
             </div>
 
@@ -820,19 +1072,19 @@ export default function AdminPanel({
                     id: "roulette",
                     color: "yellow",
                     title: "[ RULETA ]",
-                    desc: "Cinta horizontal rápida con freno gradual y marcador superior.",
+                    desc: "Cinta horizontal rápida con freno gradual.",
                   },
                   {
                     id: "slot",
                     color: "cyan",
-                    title: "[ SLOT MACHINE ]",
-                    desc: "Carrete vertical estilo tragamonedas arcade con parada seca.",
+                    title: "[ SLOT ]",
+                    desc: "Carrete vertical estilo tragamonedas.",
                   },
                   {
                     id: "card_flip",
                     color: "fuchsia",
                     title: "[ CARTA 3D ]",
-                    desc: "Giro 3D en suspenso con cambio de aura y revelación estelar.",
+                    desc: "Giro 3D con aura y revelación estelar.",
                   },
                 ].map((opt) => {
                   const isSelected = animationType === opt.id;
@@ -858,14 +1110,11 @@ export default function AdminPanel({
                     <button
                       key={opt.id}
                       type="button"
-                      id={`btn-anim-${opt.id}`}
-                      name={`btn-anim-${opt.id}`}
                       onClick={() => {
                         sounds.playClick();
                         setAnimationType(opt.id);
                       }}
                       aria-pressed={isSelected}
-                      aria-label={`Seleccionar animación ${opt.title}`}
                       className={`p-3 rounded-xl border-2 cursor-pointer transition text-left focus:outline-none focus:ring-2 focus:ring-yellow-400/40 ${
                         isSelected
                           ? palette.selected
@@ -893,14 +1142,12 @@ export default function AdminPanel({
                 className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-300 text-xs font-['Chakra_Petch'] font-bold flex items-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" aria-hidden="true" />
-                <span>¡Ajustes guardados y sincronizados exitosamente!</span>
+                <span>¡Ajustes guardados correctamente!</span>
               </div>
             )}
 
             <button
               type="submit"
-              id="btn-admin-save-settings"
-              name="btn-admin-save-settings"
               disabled={isSaving}
               className="py-3 px-6 bg-yellow-400 hover:bg-yellow-300 active:translate-y-0.5 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[4px_4px_0_#000] transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-200 disabled:opacity-60"
             >
@@ -919,6 +1166,7 @@ export default function AdminPanel({
         }}
         characterToEdit={editingCharacter}
         onSave={handleSaveCharacter}
+        catalogs={catalogs}
       />
     </div>
   );

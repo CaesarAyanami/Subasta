@@ -42,6 +42,7 @@ export default function App() {
     characterPool,
     roundVotes,
     mySlot,
+    catalogs,
     init,
     destroy,
     takeSlot,
@@ -63,6 +64,8 @@ export default function App() {
     seedDefaults,
     wipeCharacters,
     adminResetGame,
+    addCatalogItem,
+    removeCatalogItem,
   } = useGameStore();
 
   const {
@@ -95,7 +98,6 @@ export default function App() {
 
   // ==========================================================================
   // LÍMITE DE SUBASTAS POR RONDA
-  // Bloquea el botón "MARCAR LISTO" cuando se alcanza el límite.
   // ==========================================================================
   const maxAuctions = settings?.maxAuctionsPerRound ?? 20;
   const auctionsThisRound = game?.auctions_this_round ?? 0;
@@ -198,7 +200,6 @@ export default function App() {
   }, "Puja rechazada");
 
   const handleToggleReady = withToast(async (slot) => {
-    // Bloqueo extra por si acaso
     if (isLimitReached) {
       showToast(
         "LÍMITE ALCANZADO",
@@ -230,7 +231,7 @@ export default function App() {
     showToast("VOTO RETIRADO", "Has cancelado tu selección", "info", 1500);
   });
 
-  // Reset de partida desde admin (sin confirmación de jugadores)
+  // Reset de partida desde admin
   const handleAdminReset = withToast(async () => {
     await adminResetGame();
     showToast(
@@ -240,6 +241,15 @@ export default function App() {
       3000
     );
   }, "No se pudo resetear la partida");
+
+  // Catálogos (atributos / razas / traits)
+  const handleAddCatalogItem = withToast(async (category, value) => {
+    await addCatalogItem(category, value);
+  }, "No se pudo añadir al catálogo");
+
+  const handleRemoveCatalogItem = withToast(async (id) => {
+    await removeCatalogItem(id);
+  }, "No se pudo eliminar del catálogo");
 
   // --------------------------------------------------------------------------
   // RENDER — LOADING / ERROR
@@ -349,6 +359,7 @@ export default function App() {
           <AdminPanel
             settings={settings}
             characterPool={characterPool}
+            catalogs={catalogs}
             onUpdateSettings={updateSettings}
             onAddCharacter={addCharacter}
             onEditCharacter={editCharacter}
@@ -356,6 +367,8 @@ export default function App() {
             onResetDatabase={wipeCharacters}
             onSeedDefaultCharacters={seedDefaults}
             onAdminReset={handleAdminReset}
+            onAddCatalogItem={handleAddCatalogItem}
+            onRemoveCatalogItem={handleRemoveCatalogItem}
             showToast={showToast}
           />
         )}
