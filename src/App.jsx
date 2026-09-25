@@ -2,6 +2,8 @@ import React, { useEffect } from "react";
 import Header from "./components/common/Header";
 import ConnectedUsersModal from "./components/common/ConnectedUsersModal";
 import CharacterPoolModal from "./components/common/CharacterPoolModal";
+import ProbabilityModal from "./components/common/ProbabilityModal";
+import CharacterInfoModal from "./components/common/CharacterInfoModal";
 import FloatingToast from "./components/common/FloatingToast";
 import RoundControls from "./components/common/RoundControls";
 import PlayerCard from "./components/players/PlayerCard";
@@ -78,6 +80,13 @@ export default function App() {
     poolModalTab,
     openPoolModal,
     closePoolModal,
+    probabilityModalOpen,
+    openProbabilityModal,
+    closeProbabilityModal,
+    infoModalOpen,
+    infoModalCharacter,
+    openInfoModal,
+    closeInfoModal,
     soundMuted,
     toggleSound,
     toast,
@@ -96,9 +105,7 @@ export default function App() {
   const isAuctionIdle = auction?.status === "IDLE";
   const showRoundControls = canAdvanceRound || isAuctionIdle;
 
-  // ==========================================================================
-  // LÍMITE DE SUBASTAS POR RONDA
-  // ==========================================================================
+  // Límite de subastas por ronda
   const maxAuctions = settings?.maxAuctionsPerRound ?? 20;
   const auctionsThisRound = game?.auctions_this_round ?? 0;
   const isLimitReached = auctionsThisRound >= maxAuctions;
@@ -119,18 +126,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // --------------------------------------------------------------------------
-  // SINCRONIZAR gameId CON presenceStore
-  // --------------------------------------------------------------------------
+  // Sincronizar gameId con presenceStore
   useEffect(() => {
     if (game?.id) {
       setGameId(game.id);
     }
   }, [game?.id, setGameId]);
 
-  // --------------------------------------------------------------------------
-  // URL NAVIGATION
-  // --------------------------------------------------------------------------
+  // URL Navigation
   useEffect(() => {
     const handler = () => setView(checkIsAdminUrl() ? "admin" : "board");
     window.addEventListener("popstate", handler);
@@ -141,9 +144,7 @@ export default function App() {
     };
   }, [setView]);
 
-  // --------------------------------------------------------------------------
-  // PRESENCE: reflejar rol actual
-  // --------------------------------------------------------------------------
+  // Presence: reflejar rol actual
   useEffect(() => {
     if (!game) return;
 
@@ -168,7 +169,7 @@ export default function App() {
   ]);
 
   // --------------------------------------------------------------------------
-  // HANDLERS — envueltos para toasts
+  // HANDLERS
   // --------------------------------------------------------------------------
   const withToast = (fn, errorTitle = "Error") => async (...args) => {
     try {
@@ -231,7 +232,6 @@ export default function App() {
     showToast("VOTO RETIRADO", "Has cancelado tu selección", "info", 1500);
   });
 
-  // Reset de partida desde admin
   const handleAdminReset = withToast(async () => {
     await adminResetGame();
     showToast(
@@ -242,7 +242,6 @@ export default function App() {
     );
   }, "No se pudo resetear la partida");
 
-  // Catálogos (atributos / razas / traits)
   const handleAddCatalogItem = withToast(async (category, value) => {
     await addCatalogItem(category, value);
   }, "No se pudo añadir al catálogo");
@@ -250,6 +249,12 @@ export default function App() {
   const handleRemoveCatalogItem = withToast(async (id) => {
     await removeCatalogItem(id);
   }, "No se pudo eliminar del catálogo");
+
+  // Handler para abrir la ficha del personaje
+  const handleOpenCharacterInfo = (character) => {
+    if (!character) return;
+    openInfoModal(character);
+  };
 
   // --------------------------------------------------------------------------
   // RENDER — LOADING / ERROR
@@ -271,6 +276,7 @@ export default function App() {
         players={players}
         connectedUsersCount={users.length || 1}
         onOpenConnectedModal={openConnectedModal}
+        onOpenProbabilityModal={openProbabilityModal}
         availableCount={(characterPool?.available || []).length}
         historyCount={
           (characterPool?.discarded || []).length +
@@ -300,6 +306,7 @@ export default function App() {
                   onRouletteFinished={markAuctionBidding}
                   onTimerTick={updateTimerLocal}
                   onTimeExpired={finalizeAuction}
+                  onCharacterInfo={handleOpenCharacterInfo}
                 />
               </div>
 
@@ -317,6 +324,7 @@ export default function App() {
                 <InventorySlots
                   inventory={players?.player1?.inventory || []}
                   maxSlots={MAX_INVENTORY_SLOTS}
+                  onCharacterInfo={handleOpenCharacterInfo}
                 />
               </div>
 
@@ -334,6 +342,7 @@ export default function App() {
                 <InventorySlots
                   inventory={players?.player2?.inventory || []}
                   maxSlots={MAX_INVENTORY_SLOTS}
+                  onCharacterInfo={handleOpenCharacterInfo}
                 />
               </div>
             </div>
@@ -389,6 +398,20 @@ export default function App() {
         discarded={characterPool?.discarded || []}
         used={characterPool?.used || []}
         players={players}
+        onCharacterInfo={handleOpenCharacterInfo}
+      />
+
+      <ProbabilityModal
+        isOpen={probabilityModalOpen}
+        onClose={closeProbabilityModal}
+        game={game}
+        settings={settings}
+      />
+
+      <CharacterInfoModal
+        isOpen={infoModalOpen}
+        onClose={closeInfoModal}
+        character={infoModalCharacter}
       />
 
       <footer className="bg-[#090b12] border-t-2 border-slate-800/80 py-3 px-4 text-center text-xs font-['Chakra_Petch'] text-slate-500">

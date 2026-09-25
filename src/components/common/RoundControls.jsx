@@ -1,7 +1,18 @@
 import React, { useState } from "react";
-import { ArrowRight, RotateCcw, AlertTriangle, Sparkles } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  ArrowRight,
+  RotateCcw,
+  AlertTriangle,
+  Sparkles,
+  CheckCircle2,
+  Users,
+} from "lucide-react";
 import sounds from "../../services/soundEffects";
 
+// ============================================================================
+// COMPONENTE PRINCIPAL
+// ============================================================================
 export default function RoundControls({
   mySlot = null,
   players,
@@ -66,9 +77,7 @@ export default function RoundControls({
   // ==========================================================================
   // TEXTOS DINÁMICOS
   // ==========================================================================
-  const headerTitle = bothFull
-    ? "¡EQUIPOS COMPLETOS (4/4)!"
-    : "CONTROLES DE RONDA";
+  const headerTitle = bothFull ? "¡EQUIPOS COMPLETOS (4/4)!" : "CONTROLES DE RONDA";
 
   const headerSubtitle = isSpectator
     ? "Estás en modo espectador. Los jugadores activos deciden."
@@ -80,20 +89,32 @@ export default function RoundControls({
   // RENDER
   // ==========================================================================
   return (
-    <div
-      className="bg-[#111422] border-4 border-yellow-400 rounded-2xl p-4 sm:p-5 shadow-[6px_6px_0_#000] animate-fade-in"
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, type: "spring", stiffness: 200 }}
+      className="relative bg-[#111422] border-4 border-yellow-400 rounded-2xl p-4 sm:p-5 shadow-[6px_6px_0_#000] overflow-hidden"
       aria-label="Controles de ronda"
     >
-      {/* Cabecera */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b-2 border-slate-800 pb-2.5">
-        <div className="flex items-center gap-2">
-          <Sparkles
-            className="w-5 h-5 text-yellow-400 animate-spin"
-            style={{ animationDuration: "10s" }}
+      {/* Glow decorativo */}
+      <div
+        className="absolute -top-24 -right-24 w-64 h-64 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none"
+        aria-hidden="true"
+      />
+
+      {/* ─── Cabecera ────────────────────────────────────────────────────── */}
+      <div className="relative flex flex-wrap items-center justify-between gap-3 mb-3 border-b-2 border-slate-800 pb-3">
+        <div className="flex items-center gap-3">
+          <motion.div
+            className="p-2 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-lg border-2 border-black shadow-[2px_2px_0_#000]"
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
             aria-hidden="true"
-          />
+          >
+            <Sparkles className="w-5 h-5 text-black" strokeWidth={2.5} />
+          </motion.div>
           <div>
-            <h3 className="font-['Press_Start_2P'] text-xs text-yellow-400">
+            <h3 className="font-['Press_Start_2P'] text-xs text-yellow-400 drop-shadow-[1px_1px_0_#000]">
               {headerTitle}
             </h3>
             <p className="text-[11px] font-['Chakra_Petch'] text-slate-300">
@@ -102,96 +123,78 @@ export default function RoundControls({
           </div>
         </div>
 
-        {/* Indicadores de pool */}
+        {/* Pool stats */}
         <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] font-['Chakra_Petch'] font-bold">
-          <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/60 text-emerald-300">
-            Disponibles: {poolStats.available}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-slate-800 border border-slate-600 text-slate-300">
-            Usados: {poolStats.used}
-          </span>
-          <span className="px-2 py-0.5 rounded bg-rose-950/80 border border-rose-500/60 text-rose-300">
-            Desechados: {poolStats.discarded}
-          </span>
+          <PoolStat
+            label="Disponibles"
+            value={poolStats.available}
+            variant="emerald"
+          />
+          <PoolStat label="Usados" value={poolStats.used} variant="slate" />
+          <PoolStat
+            label="Desechados"
+            value={poolStats.discarded}
+            variant="rose"
+          />
         </div>
       </div>
 
-      {/* Estado de confirmación — solo si hay algún voto */}
-      {hasVotes && (
-        <div
-          className="mb-4 p-3 rounded-xl bg-black/60 border-2 border-slate-700"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="text-[11px] font-['Press_Start_2P'] text-yellow-300 mb-2 flex items-center justify-between flex-wrap gap-2">
-            <span>ESTADO DE CONFIRMACIÓN:</span>
-            {p1Vote && p2Vote && p1Vote !== p2Vote && (
-              <span className="text-rose-400 text-[10px] animate-pulse">
-                ⚠️ Opciones distintas seleccionadas
-              </span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {/* Jugador 1 */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between text-xs font-['Chakra_Petch'] ${
-                p1Vote
-                  ? "bg-cyan-950/60 border-cyan-400 text-cyan-200"
-                  : "bg-black/30 border-slate-800 text-slate-500"
-              }`}
-              aria-label={`${p1?.name || "Jugador 1"}: ${
-                p1Vote ? getActionLabel(p1Vote) : "esperando"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-bold truncate">
-                <span
-                  className="w-2 h-2 rounded-full bg-cyan-400 flex-shrink-0"
-                  aria-hidden="true"
-                />
-                <span className="truncate">{p1?.name || "Jugador 1"}:</span>
+      {/* ─── Estado de confirmación ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {hasVotes && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25 }}
+            className="relative mb-4"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="p-3 rounded-xl bg-black/60 border-2 border-slate-700">
+              <div className="text-[11px] font-['Press_Start_2P'] text-yellow-300 mb-2 flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-2">
+                  <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                  ESTADO DE CONFIRMACIÓN
+                </span>
+                {p1Vote && p2Vote && p1Vote !== p2Vote && (
+                  <motion.span
+                    initial={{ scale: 0.9 }}
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="text-rose-400 text-[10px] flex items-center gap-1"
+                  >
+                    ⚠️ Opciones distintas
+                  </motion.span>
+                )}
               </div>
-              <span className="font-['Press_Start_2P'] text-[9px] uppercase whitespace-nowrap">
-                {p1Vote ? getActionLabel(p1Vote) : "Esperando..."}
-              </span>
-            </div>
 
-            {/* Jugador 2 */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between text-xs font-['Chakra_Petch'] ${
-                p2Vote
-                  ? "bg-rose-950/60 border-rose-400 text-rose-200"
-                  : "bg-black/30 border-slate-800 text-slate-500"
-              }`}
-              aria-label={`${p2?.name || "Jugador 2"}: ${
-                p2Vote ? getActionLabel(p2Vote) : "esperando"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-bold truncate">
-                <span
-                  className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0"
-                  aria-hidden="true"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <VoteCard
+                  name={p1?.name || "Jugador 1"}
+                  vote={p1Vote}
+                  color="cyan"
+                  getActionLabel={getActionLabel}
                 />
-                <span className="truncate">{p2?.name || "Jugador 2"}:</span>
+                <VoteCard
+                  name={p2?.name || "Jugador 2"}
+                  vote={p2Vote}
+                  color="rose"
+                  getActionLabel={getActionLabel}
+                />
               </div>
-              <span className="font-['Press_Start_2P'] text-[9px] uppercase whitespace-nowrap">
-                {p2Vote ? getActionLabel(p2Vote) : "Esperando..."}
-              </span>
             </div>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Botonera */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* 1. Siguiente */}
+      {/* ─── Botonera ────────────────────────────────────────────────────── */}
+      <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3">
         <ActionButton
           id="btn-round-next"
           variant="emerald"
-          icon={
-            <ArrowRight className="w-4 h-4 text-black" aria-hidden="true" />
-          }
-          title={myVote === "next" ? "✓ CONFIRMADO" : "SIGUIENTE"}
+          icon={<ArrowRight className="w-4 h-4" strokeWidth={3} />}
+          title={myVote === "next" ? "CONFIRMADO" : "SIGUIENTE"}
           subtitle="Pasa a usados + reinicia monedas"
           active={myVote === "next"}
           disabled={isSpectator || poolStats.available === 0}
@@ -200,14 +203,11 @@ export default function RoundControls({
           ariaPressed={myVote === "next"}
         />
 
-        {/* 2. Siguiente + Desechos */}
         <ActionButton
           id="btn-round-next-discarded"
           variant="cyan"
-          icon={
-            <RotateCcw className="w-4 h-4 text-black" aria-hidden="true" />
-          }
-          title={myVote === "next_discarded" ? "✓ CONFIRMADO" : "+ DESECHOS"}
+          icon={<RotateCcw className="w-4 h-4" strokeWidth={3} />}
+          title={myVote === "next_discarded" ? "CONFIRMADO" : "+ DESECHOS"}
           subtitle="Recupera desechados al pool"
           active={myVote === "next_discarded"}
           disabled={isSpectator}
@@ -216,41 +216,35 @@ export default function RoundControls({
           ariaPressed={myVote === "next_discarded"}
         />
 
-        {/* 3. Resetear */}
         {resetConfirm ? (
-          <div className="flex items-stretch gap-1">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex items-stretch gap-1.5"
+          >
             <button
               type="button"
-              id="btn-round-reset-confirm"
-              name="btn-round-reset-confirm"
               onClick={() => handleActionClick("reset")}
               aria-label="Confirmar reinicio total de la partida"
-              className="flex-1 py-3 px-2 rounded-xl border-4 border-black bg-rose-600 hover:bg-rose-500 text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-rose-300"
+              className="flex-1 py-3 px-2 rounded-xl border-4 border-black bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-rose-300"
             >
               ¿CONFIRMAR?
             </button>
             <button
               type="button"
-              id="btn-round-reset-cancel"
-              name="btn-round-reset-cancel"
               onClick={() => setResetConfirm(false)}
               aria-label="Cancelar reinicio"
-              className="py-3 px-3 rounded-xl border-2 border-slate-600 bg-slate-800 text-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="py-3 px-3 rounded-xl border-2 border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition focus:outline-none focus:ring-2 focus:ring-slate-400"
             >
               No
             </button>
-          </div>
+          </motion.div>
         ) : (
           <ActionButton
             id="btn-round-reset"
             variant="rose"
-            icon={
-              <AlertTriangle
-                className="w-4 h-4 text-yellow-300"
-                aria-hidden="true"
-              />
-            }
-            title={myVote === "reset" ? "✓ CONFIRMADO" : "RESETEAR TODO"}
+            icon={<AlertTriangle className="w-4 h-4" strokeWidth={3} />}
+            title={myVote === "reset" ? "CONFIRMADO" : "RESETEAR TODO"}
             subtitle="Reiniciar partida desde cero"
             active={myVote === "reset"}
             disabled={isSpectator}
@@ -260,6 +254,69 @@ export default function RoundControls({
           />
         )}
       </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTE: PoolStat
+// ============================================================================
+function PoolStat({ label, value, variant }) {
+  const palettes = {
+    emerald: "bg-emerald-950/80 border-emerald-500/60 text-emerald-300",
+    slate: "bg-slate-800 border-slate-600 text-slate-300",
+    rose: "bg-rose-950/80 border-rose-500/60 text-rose-300",
+  }[variant];
+
+  return (
+    <span
+      className={`px-2.5 py-1 rounded-lg border-2 ${palettes} font-bold whitespace-nowrap`}
+    >
+      {label}: {value}
+    </span>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTE: VoteCard
+// ============================================================================
+function VoteCard({ name, vote, color, getActionLabel }) {
+  const palette = {
+    cyan: {
+      active: "bg-cyan-950/60 border-cyan-400 text-cyan-200",
+      dot: "bg-cyan-400",
+      glow: "shadow-[0_0_10px_rgba(34,211,238,0.4)]",
+    },
+    rose: {
+      active: "bg-rose-950/60 border-rose-400 text-rose-200",
+      dot: "bg-rose-500",
+      glow: "shadow-[0_0_10px_rgba(244,63,94,0.4)]",
+    },
+  }[color];
+
+  const hasVoted = !!vote;
+
+  return (
+    <div
+      className={`p-2.5 rounded-lg border-2 flex items-center justify-between text-xs font-['Chakra_Petch'] transition-all ${
+        hasVoted
+          ? `${palette.active} ${palette.glow}`
+          : "bg-black/30 border-slate-800 text-slate-500"
+      }`}
+      aria-label={`${name}: ${vote ? getActionLabel(vote) : "esperando"}`}
+    >
+      <div className="flex items-center gap-2 font-bold truncate min-w-0">
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${
+            hasVoted ? palette.dot : "bg-slate-600"
+          }`}
+          aria-hidden="true"
+        />
+        <span className="truncate">{name}:</span>
+      </div>
+      <span className="font-['Press_Start_2P'] text-[9px] uppercase whitespace-nowrap ml-2">
+        {vote ? getActionLabel(vote) : "Esperando..."}
+      </span>
     </div>
   );
 }
@@ -281,51 +338,68 @@ function ActionButton({
 }) {
   const palettes = {
     emerald: {
-      base: "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400",
-      activeBg: "bg-emerald-300 ring-4 ring-emerald-400 animate-pulse",
+      base: "bg-gradient-to-br from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500",
+      activeBg: "bg-gradient-to-br from-emerald-300 to-teal-300 ring-4 ring-emerald-400",
+      text: "text-black",
       subtitle: "text-emerald-950",
+      glow: "shadow-[4px_4px_0_#000]",
     },
     cyan: {
-      base: "bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400",
-      activeBg: "bg-cyan-300 ring-4 ring-cyan-400 animate-pulse",
+      base: "bg-gradient-to-br from-cyan-400 to-blue-600 hover:from-cyan-300 hover:to-blue-500",
+      activeBg: "bg-gradient-to-br from-cyan-300 to-blue-300 ring-4 ring-cyan-400",
+      text: "text-black",
       subtitle: "text-blue-950",
+      glow: "shadow-[4px_4px_0_#000]",
     },
     rose: {
-      base: "bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600",
-      activeBg: "bg-rose-500 ring-4 ring-rose-400 animate-pulse",
+      base: "bg-gradient-to-br from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600",
+      activeBg: "bg-gradient-to-br from-rose-400 to-red-500 ring-4 ring-rose-400",
+      text: "text-white",
       subtitle: "text-rose-200",
+      glow: "shadow-[4px_4px_0_#000]",
     },
   }[variant];
 
-  const isRose = variant === "rose";
-  const textColor = isRose ? "text-white" : "text-black";
-
   return (
-    <button
+    <motion.button
       type="button"
       id={id}
-      name={id}
       onClick={onClick}
       disabled={disabled}
       aria-label={ariaLabel}
       aria-pressed={ariaPressed}
-      className={`group py-3 px-4 rounded-xl border-4 border-black font-['Press_Start_2P'] text-[10px] sm:text-[11px] shadow-[4px_4px_0_#000] transition text-left sm:text-center active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+      whileHover={!disabled ? { scale: 1.02 } : {}}
+      whileTap={!disabled ? { scale: 0.98 } : {}}
+      className={`group relative py-3 px-4 rounded-xl border-4 border-black font-['Press_Start_2P'] text-[10px] sm:text-[11px] transition text-left sm:text-center focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
         active ? palettes.activeBg : palettes.base
-      } ${textColor} ${
+      } ${palettes.text} ${palettes.glow} ${
         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
       }`}
     >
-      <div className="flex items-center justify-center gap-2">
-        {icon}
+      {active && (
+        <motion.div
+          className="absolute inset-0 rounded-xl ring-4 ring-white/40 pointer-events-none"
+          animate={{ opacity: [0.4, 0.9, 0.4] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="relative flex items-center justify-center gap-2">
+        {active ? (
+          <CheckCircle2 className="w-4 h-4" strokeWidth={3} aria-hidden="true" />
+        ) : (
+          icon
+        )}
         <span>{title}</span>
       </div>
       <div
-        className={`text-[9px] font-['Chakra_Petch'] font-bold mt-1 ${
+        className={`relative text-[9px] font-['Chakra_Petch'] font-bold mt-1 ${
           active ? "text-black" : palettes.subtitle
         }`}
       >
         {subtitle}
       </div>
-    </button>
+    </motion.button>
   );
 }

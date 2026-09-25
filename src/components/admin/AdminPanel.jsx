@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
   Trash2,
@@ -18,6 +19,14 @@ import {
   X,
   Package,
   Tag,
+  Crown,
+  Zap,
+  Flame,
+  Shield,
+  Users,
+  Database,
+  Save,
+  Eye,
 } from "lucide-react";
 import CharacterFormModal from "./CharacterFormModal";
 import { RARITY_CONFIG } from "../auction/CharacterCard";
@@ -29,9 +38,27 @@ import sounds from "../../services/soundEffects";
 const ALL_RARITIES = ["R", "SR", "SSR", "UR", "LR"];
 
 const CATALOG_TABS = [
-  { id: "attribute", label: "Atributos", color: "yellow" },
-  { id: "race", label: "Razas", color: "cyan" },
-  { id: "trait", label: "Características", color: "fuchsia" },
+  {
+    id: "attribute",
+    label: "Atributos",
+    icon: Zap,
+    color: "yellow",
+    bg: "from-yellow-500 to-amber-600",
+  },
+  {
+    id: "race",
+    label: "Razas",
+    icon: Users,
+    color: "cyan",
+    bg: "from-cyan-400 to-blue-500",
+  },
+  {
+    id: "trait",
+    label: "Características",
+    icon: Crown,
+    color: "fuchsia",
+    bg: "from-fuchsia-500 to-purple-600",
+  },
 ];
 
 // ============================================================================
@@ -61,7 +88,7 @@ export default function AdminPanel({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState("characters");
 
-  // Settings (form)
+  // Settings
   const [initialCoins, setInitialCoins] = useState(settings?.initialCoins ?? 20);
   const [auctionTime, setAuctionTime] = useState(settings?.auctionTime ?? 20);
   const [maxAuctionsPerRound, setMaxAuctionsPerRound] = useState(
@@ -88,7 +115,7 @@ export default function AdminPanel({
   const [raceFilter, setRaceFilter] = useState("");
   const [traitFilter, setTraitFilter] = useState("");
 
-  // Catálogos - input para añadir
+  // Catálogos
   const [newCatalogValue, setNewCatalogValue] = useState("");
   const [catalogSubTab, setCatalogSubTab] = useState("attribute");
 
@@ -115,7 +142,6 @@ export default function AdminPanel({
   const discarded = characterPool?.discarded || [];
   const totalCharacters = available.length + used.length + discarded.length;
 
-  // Catálogos normalizados
   const attributesList = catalogs?.attributes || [];
   const racesList = catalogs?.races || [];
   const traitsList = catalogs?.traits || [];
@@ -137,27 +163,12 @@ export default function AdminPanel({
 
     const min = parseInt(minAcceptance, 10);
     const max = parseInt(maxAcceptance, 10);
-    if (!isNaN(min)) {
-      result = result.filter((c) => (c.acceptance ?? 0) >= min);
-    }
-    if (!isNaN(max)) {
-      result = result.filter((c) => (c.acceptance ?? 0) <= max);
-    }
+    if (!isNaN(min)) result = result.filter((c) => (c.acceptance ?? 0) >= min);
+    if (!isNaN(max)) result = result.filter((c) => (c.acceptance ?? 0) <= max);
 
-    // Filtros nuevos del #8
-    if (attributeFilter) {
-      result = result.filter((c) => c.attribute === attributeFilter);
-    }
-    if (raceFilter) {
-      result = result.filter(
-        (c) => Array.isArray(c.races) && c.races.includes(raceFilter)
-      );
-    }
-    if (traitFilter) {
-      result = result.filter(
-        (c) => Array.isArray(c.traits) && c.traits.includes(traitFilter)
-      );
-    }
+    if (attributeFilter) result = result.filter((c) => c.attribute === attributeFilter);
+    if (raceFilter) result = result.filter((c) => Array.isArray(c.races) && c.races.includes(raceFilter));
+    if (traitFilter) result = result.filter((c) => Array.isArray(c.traits) && c.traits.includes(traitFilter));
 
     return result;
   }, [
@@ -194,14 +205,12 @@ export default function AdminPanel({
   const toggleRarity = (rarity) => {
     sounds.playClick();
     setRarityFilter((prev) =>
-      prev.includes(rarity)
-        ? prev.filter((r) => r !== rarity)
-        : [...prev, rarity]
+      prev.includes(rarity) ? prev.filter((r) => r !== rarity) : [...prev, rarity]
     );
   };
 
   // ==========================================================================
-  // HANDLERS — MODAL
+  // HANDLERS
   // ==========================================================================
   const handleOpenAddModal = () => {
     sounds.playClick();
@@ -246,9 +255,6 @@ export default function AdminPanel({
     }
   };
 
-  // ==========================================================================
-  // HANDLERS — SETTINGS
-  // ==========================================================================
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     sounds.playClick();
@@ -257,10 +263,7 @@ export default function AdminPanel({
       await onUpdateSettings({
         initialCoins: Math.max(1, parseInt(initialCoins, 10) || 20),
         auctionTime: Math.max(5, parseInt(auctionTime, 10) || 20),
-        maxAuctionsPerRound: Math.max(
-          1,
-          Math.min(200, parseInt(maxAuctionsPerRound, 10) || 20)
-        ),
+        maxAuctionsPerRound: Math.max(1, Math.min(200, parseInt(maxAuctionsPerRound, 10) || 20)),
         animationType,
       });
       setSavedSuccess(true);
@@ -268,20 +271,12 @@ export default function AdminPanel({
       setTimeout(() => setSavedSuccess(false), 2000);
     } catch (err) {
       console.error("[AdminPanel.handleSaveSettings]", err);
-      showToast?.(
-        "ERROR",
-        err.message || "No se pudieron guardar los ajustes",
-        "warning",
-        3500
-      );
+      showToast?.("ERROR", err.message || "No se pudieron guardar los ajustes", "warning", 3500);
     } finally {
       setIsSaving(false);
     }
   };
 
-  // ==========================================================================
-  // HANDLERS — SEED / WIPE / RESET
-  // ==========================================================================
   const handleSeed = async () => {
     sounds.playVictory();
     setIsSeeding(true);
@@ -325,9 +320,6 @@ export default function AdminPanel({
     }
   };
 
-  // ==========================================================================
-  // HANDLERS — CATÁLOGOS
-  // ==========================================================================
   const handleAddCatalogItem = async () => {
     const value = newCatalogValue.trim();
     if (!value) return;
@@ -357,807 +349,210 @@ export default function AdminPanel({
   // RENDER
   // ==========================================================================
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in pb-12">
-      {/* Botón regresar */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
+    <div className="relative max-w-6xl mx-auto space-y-6 pb-12">
+      {/* Glow decorativo fondo */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-cyan-500/5 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-fuchsia-500/5 rounded-full blur-[120px]" />
+      </div>
+
+      {/* ─── Botón regresar ───────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative flex items-center justify-between flex-wrap gap-2"
+      >
         <a
           href="/"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-yellow-400 font-['Press_Start_2P'] text-xs rounded-xl border-2 border-slate-600 shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          className="group inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-yellow-400 font-['Press_Start_2P'] text-xs rounded-xl border-2 border-slate-600 shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-yellow-400"
           aria-label="Volver al tablero principal"
         >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition" aria-hidden="true" />
           <span>← Volver al Tablero</span>
         </a>
         <span className="text-[11px] font-mono text-slate-500 bg-black/40 px-2.5 py-1 rounded-lg border border-slate-800">
-          Ruta: /admin
+          🛡️ /admin
         </span>
-      </div>
+      </motion.div>
 
-      {/* Cabecera con tabs */}
-      <div className="bg-[#151928] border-4 border-cyan-400 rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#0891b2] flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <Settings className="w-6 h-6 text-cyan-400" aria-hidden="true" />
-            <h1 className="font-['Press_Start_2P'] text-sm sm:text-lg text-cyan-400">
-              PANEL ADMINISTRADOR
-            </h1>
-          </div>
-          <p className="text-xs sm:text-sm font-['Chakra_Petch'] text-slate-300">
-            Gestión completa del pool, catálogos y reglas del juego.
-          </p>
-        </div>
+      {/* ─── Cabecera con tabs ───────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative bg-gradient-to-br from-[#151928] to-[#0f1524] border-4 border-cyan-400 rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#0891b2] overflow-hidden"
+      >
+        <div className="absolute -top-20 -right-20 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" aria-hidden="true" />
 
-        <div
-          role="tablist"
-          aria-label="Secciones del panel"
-          className="flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "characters"}
-            onClick={() => setActiveTab("characters")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-              activeTab === "characters"
-                ? "bg-cyan-400 text-black shadow-[2px_2px_0_#000]"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Personajes ({totalCharacters})
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "catalogs"}
-            onClick={() => setActiveTab("catalogs")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
-              activeTab === "catalogs"
-                ? "bg-purple-400 text-black shadow-[2px_2px_0_#000]"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Catálogos
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === "settings"}
-            onClick={() => setActiveTab("settings")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
-              activeTab === "settings"
-                ? "bg-yellow-400 text-black shadow-[2px_2px_0_#000]"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Ajustes
-          </button>
-        </div>
-      </div>
-
-      {/* Acciones rápidas (solo en pestaña personajes) */}
-      {activeTab === "characters" && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <button
-            type="button"
-            onClick={handleOpenAddModal}
-            className="p-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-          >
-            <Plus className="w-4 h-4" aria-hidden="true" />
-            <span>AGREGAR</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSeed}
-            disabled={isSeeding}
-            className="p-3.5 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-cyan-300 disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {isSeeding ? (
-              <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Download className="w-4 h-4" aria-hidden="true" />
-            )}
-            <span>{isSeeding ? "CARGANDO..." : "SEED"}</span>
-          </button>
-
-          {showResetConfirm ? (
-            <div className="flex gap-2" role="alertdialog">
-              <button
-                type="button"
-                onClick={handleAdminReset}
-                disabled={isResetting}
-                className="flex-1 p-3 bg-amber-500 hover:bg-amber-400 rounded-xl border-4 border-black text-black font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-amber-300 disabled:opacity-60"
-              >
-                {isResetting ? "RESET..." : "¿RESET?"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs"
-              >
-                No
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                sounds.playClick();
-                setShowResetConfirm(true);
-              }}
-              className="p-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-black font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-amber-300"
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <motion.div
+              animate={{ rotate: [0, 360] }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="p-2.5 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-xl border-2 border-black shadow-[3px_3px_0_#000]"
+              aria-hidden="true"
             >
-              <RotateCcw className="w-4 h-4" aria-hidden="true" />
-              <span>RESET PARTIDA</span>
-            </button>
-          )}
-
-          {showCleanConfirm ? (
-            <div className="flex gap-2" role="alertdialog">
-              <button
-                type="button"
-                onClick={handleCleanDb}
-                disabled={isWiping}
-                className="flex-1 p-3 bg-rose-600 hover:bg-rose-500 rounded-xl border-4 border-black text-white font-['Press_Start_2P'] text-[10px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-rose-300 disabled:opacity-60"
-              >
-                {isWiping ? "BORRANDO..." : "¿BORRAR DB?"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowCleanConfirm(false)}
-                className="px-3 bg-slate-800 rounded-xl border-2 border-slate-700 text-slate-300 text-xs"
-              >
-                No
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                sounds.playClick();
-                setShowCleanConfirm(true);
-              }}
-              className="p-3.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 rounded-xl border-4 border-black shadow-[4px_4px_0_#000] text-white font-['Press_Start_2P'] text-xs flex items-center justify-center gap-2 transition active:translate-y-1 focus:outline-none focus:ring-2 focus:ring-rose-300"
-            >
-              <Trash2 className="w-4 h-4 text-yellow-300" aria-hidden="true" />
-              <span>BORRAR DB</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ====================================================================
-          TAB: PERSONAJES
-          ==================================================================== */}
-      {activeTab === "characters" && (
-        <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
+              <Settings className="w-6 h-6 text-black" strokeWidth={2.5} />
+            </motion.div>
             <div>
-              <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400">
-                POOL DE PERSONAJES ({filteredAvailable.length}
-                {hasActiveFilters ? ` / ${available.length}` : ""} DISPONIBLES)
-              </h2>
-              <p className="text-xs text-slate-400 font-['Chakra_Petch']">
-                Total: {totalCharacters} | Usados: {used.length} | Desechados:{" "}
-                {discarded.length}
+              <h1 className="font-['Press_Start_2P'] text-sm sm:text-lg text-cyan-400 tracking-wider drop-shadow-[2px_2px_0_#000]">
+                PANEL ADMIN
+              </h1>
+              <p className="text-xs sm:text-sm font-['Chakra_Petch'] text-slate-300">
+                Gestión completa del pool, catálogos y reglas.
               </p>
             </div>
+          </div>
 
-            <button
-              type="button"
+          <AdminTabs activeTab={activeTab} setActiveTab={setActiveTab} totalCharacters={totalCharacters} />
+        </div>
+      </motion.div>
+
+      {/* ─── Acciones rápidas (solo en personajes) ───────────────────── */}
+      <AnimatePresence mode="wait">
+        {activeTab === "characters" && (
+          <motion.div
+            key="quick-actions"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3"
+          >
+            <QuickAction
+              id="btn-add"
+              icon={Plus}
+              label="AGREGAR"
+              color="emerald"
               onClick={handleOpenAddModal}
-              className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-300 text-black text-xs font-['Press_Start_2P'] rounded-lg border-2 border-black flex items-center gap-1.5 shadow-[2px_2px_0_#000] focus:outline-none focus:ring-2 focus:ring-yellow-200"
-            >
-              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Nuevo</span>
-            </button>
-          </div>
-
-          {/* FILTROS */}
-          <div className="space-y-3 bg-black/30 border-2 border-slate-800 rounded-xl p-3">
-            <div className="flex flex-wrap gap-2 items-center">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none"
-                  aria-hidden="true"
-                />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Buscar personaje por nombre..."
-                  aria-label="Buscar personaje por nombre"
-                  className="w-full pl-9 pr-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-cyan-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-cyan-400/40"
-                />
-              </div>
-
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  aria-label="Limpiar todos los filtros"
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 rounded-lg text-xs font-['Chakra_Petch'] text-slate-200 flex items-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-rose-400"
-                >
-                  <X className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Limpiar filtros</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-3 items-center">
-              {/* Rarezas */}
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
-                  Rareza:
-                </span>
-                {ALL_RARITIES.map((r) => {
-                  const isActive = rarityFilter.includes(r);
-                  const cfg = RARITY_CONFIG[r];
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => toggleRarity(r)}
-                      aria-pressed={isActive}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
-                        isActive
-                          ? `${cfg.badgeClass} scale-105`
-                          : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Aceptación */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
-                  Acept:
-                </span>
-                <input
-                  type="number"
-                  min="0"
-                  max="20"
-                  value={minAcceptance}
-                  onChange={(e) => setMinAcceptance(e.target.value)}
-                  placeholder="min"
-                  aria-label="Aceptación mínima"
-                  className="w-16 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
-                />
-                <span className="text-slate-500 text-xs">–</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="20"
-                  value={maxAcceptance}
-                  onChange={(e) => setMaxAcceptance(e.target.value)}
-                  placeholder="max"
-                  aria-label="Aceptación máxima"
-                  className="w-16 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
-                />
-              </div>
-
-              {/* Atributo */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
-                  Atrib:
-                </span>
-                <select
-                  value={attributeFilter}
-                  onChange={(e) => setAttributeFilter(e.target.value)}
-                  aria-label="Filtrar por atributo"
-                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
-                >
-                  <option value="">Todos</option>
-                  {attributesList.map((a) => (
-                    <option key={a.id} value={a.value}>
-                      {a.value}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Raza */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
-                  Raza:
-                </span>
-                <select
-                  value={raceFilter}
-                  onChange={(e) => setRaceFilter(e.target.value)}
-                  aria-label="Filtrar por raza"
-                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
-                >
-                  <option value="">Todas</option>
-                  {racesList.map((r) => (
-                    <option key={r.id} value={r.value}>
-                      {r.value}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Trait */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">
-                  Caract:
-                </span>
-                <select
-                  value={traitFilter}
-                  onChange={(e) => setTraitFilter(e.target.value)}
-                  aria-label="Filtrar por característica"
-                  className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none max-w-[140px]"
-                >
-                  <option value="">Todas</option>
-                  {traitsList.map((t) => (
-                    <option key={t.id} value={t.value}>
-                      {t.value}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* LISTA */}
-          {available.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
-              <AlertTriangle
-                className="w-10 h-10 text-yellow-400 mx-auto mb-2 opacity-60"
-                aria-hidden="true"
-              />
-              <p className="font-['Press_Start_2P'] text-xs text-slate-400 mb-3">
-                No hay personajes disponibles en el pool activo.
-              </p>
-              <button
-                type="button"
-                onClick={handleSeed}
-                disabled={isSeeding}
-                className="px-4 py-2 bg-cyan-400 hover:bg-cyan-300 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] disabled:opacity-60"
-              >
-                {isSeeding ? "Cargando..." : "Cargar Personajes Iniciales"}
-              </button>
-            </div>
-          ) : filteredAvailable.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
-              <Search
-                className="w-10 h-10 text-slate-600 mx-auto mb-2 opacity-60"
-                aria-hidden="true"
-              />
-              <p className="font-['Press_Start_2P'] text-xs text-slate-400 mb-3">
-                No hay personajes que coincidan con los filtros.
-              </p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-['Chakra_Petch'] text-xs rounded-xl border-2 border-slate-600"
-              >
-                Limpiar filtros
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredAvailable.map((char) => {
-                const config = RARITY_CONFIG[char.rarity || "R"];
-                const imgSrc = char.image_url || char.imageUrl || "";
-                const races = Array.isArray(char.races) ? char.races : [];
-                const traits = Array.isArray(char.traits) ? char.traits : [];
-                return (
-                  <div
-                    key={char.id}
-                    className={`rounded-xl border-2 ${config.cardBorder} ${config.cardBg} p-3 flex flex-col justify-between gap-2 shadow-[2px_2px_0_#000]`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-14 h-14 rounded-lg overflow-hidden border border-black/60 flex-shrink-0 bg-black">
-                        {imgSrc ? (
-                          <img
-                            src={imgSrc}
-                            alt={char.name}
-                            loading="lazy"
-                            decoding="async"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : null}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 mb-1">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[9px] font-['Press_Start_2P'] ${config.badgeClass}`}
-                          >
-                            {config.label}
-                          </span>
-                          <span className="text-[10px] font-['Chakra_Petch'] text-slate-300 font-bold">
-                            Acept: 0-{char.acceptance}
-                          </span>
-                        </div>
-                        <h4 className="font-['Press_Start_2P'] text-xs text-white truncate drop-shadow-[1px_1px_0_#000]">
-                          {char.name}
-                        </h4>
-                        {/* Info extra (atributo/razas) */}
-                        {(char.attribute && char.attribute !== "Desconocido") ||
-                        races.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {char.attribute &&
-                              char.attribute !== "Desconocido" && (
-                                <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 border border-yellow-500/50 text-[9px] font-['Chakra_Petch'] text-yellow-300">
-                                  {char.attribute}
-                                </span>
-                              )}
-                            {races.slice(0, 2).map((r) => (
-                              <span
-                                key={r}
-                                className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/50 text-[9px] font-['Chakra_Petch'] text-cyan-300"
-                              >
-                                {r}
-                              </span>
-                            ))}
-                            {races.length > 2 && (
-                              <span className="text-[9px] text-slate-500">
-                                +{races.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-end gap-2 border-t border-slate-700/60 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(char)}
-                        aria-label={`Editar ${char.name}`}
-                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-['Chakra_Petch'] font-bold flex items-center gap-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400"
-                      >
-                        <Edit className="w-3 h-3" aria-hidden="true" />
-                        <span>Editar</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(char)}
-                        disabled={deletingId === char.id}
-                        aria-label={`Eliminar ${char.name}`}
-                        className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 rounded text-[10px] font-['Chakra_Petch'] font-bold flex items-center gap-1 border border-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-50"
-                      >
-                        {deletingId === char.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
-                        ) : (
-                          <Trash2 className="w-3 h-3" aria-hidden="true" />
-                        )}
-                        <span>Eliminar</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ====================================================================
-          TAB: CATÁLOGOS
-          ==================================================================== */}
-      {activeTab === "catalogs" && (
-        <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4">
-          <div className="border-b-2 border-slate-800 pb-3">
-            <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-purple-400">
-              CATÁLOGOS
-            </h2>
-            <p className="text-xs text-slate-400 font-['Chakra_Petch']">
-              Gestiona los valores disponibles para asignar a los personajes.
-              Los cambios se sincronizan en tiempo real.
-            </p>
-          </div>
-
-          {/* Sub-tabs: Atributos / Razas / Traits */}
-          <div
-            role="tablist"
-            className="flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700"
-          >
-            {CATALOG_TABS.map((t) => {
-              const counts = {
-                attribute: attributesList.length,
-                race: racesList.length,
-                trait: traitsList.length,
-              };
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={catalogSubTab === t.id}
-                  onClick={() => {
-                    sounds.playClick();
-                    setCatalogSubTab(t.id);
-                    setNewCatalogValue("");
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition focus:outline-none focus:ring-2 focus:ring-purple-400 ${
-                    catalogSubTab === t.id
-                      ? "bg-purple-400 text-black shadow-[2px_2px_0_#000]"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {t.label} ({counts[t.id]})
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Input para añadir */}
-          <div className="flex gap-2 items-stretch">
-            <input
-              type="text"
-              value={newCatalogValue}
-              onChange={(e) => setNewCatalogValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleAddCatalogItem();
-                }
-              }}
-              placeholder={
-                catalogSubTab === "attribute"
-                  ? "Nuevo atributo (ej: Luz)"
-                  : catalogSubTab === "race"
-                  ? "Nueva raza (ej: Hadas)"
-                  : "Nueva característica (ej: Rey)"
-              }
-              aria-label="Nuevo valor de catálogo"
-              maxLength={40}
-              className="flex-1 px-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-purple-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-purple-400/40"
             />
-            <button
-              type="button"
-              onClick={handleAddCatalogItem}
-              disabled={!newCatalogValue.trim()}
-              className="px-4 py-2 bg-purple-500 hover:bg-purple-400 text-black font-['Press_Start_2P'] text-xs rounded-lg border-2 border-black shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Añadir</span>
-            </button>
-          </div>
+            <QuickAction
+              id="btn-seed"
+              icon={isSeeding ? Loader2 : Download}
+              label={isSeeding ? "CARGANDO..." : "SEED"}
+              color="cyan"
+              onClick={handleSeed}
+              disabled={isSeeding}
+              loading={isSeeding}
+            />
 
-          {/* Lista de items */}
-          {(() => {
-            const items =
-              catalogSubTab === "attribute"
-                ? attributesList
-                : catalogSubTab === "race"
-                ? racesList
-                : traitsList;
-
-            if (items.length === 0) {
-              return (
-                <div className="text-center py-8 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
-                  <Tag
-                    className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60"
-                    aria-hidden="true"
-                  />
-                  <p className="font-['Chakra_Petch'] text-xs text-slate-500">
-                    No hay valores. Añade el primero arriba.
-                  </p>
-                </div>
-              );
-            }
-
-            return (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {items.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-2 px-3 py-2 bg-black/40 border-2 border-slate-700 rounded-lg group hover:border-purple-400/60 transition"
-                  >
-                    <span className="font-['Chakra_Petch'] text-sm text-white truncate">
-                      {item.value}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveCatalogItem(item)}
-                      aria-label={`Eliminar ${item.value}`}
-                      className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition focus:outline-none focus:ring-2 focus:ring-rose-400 flex-shrink-0"
-                    >
-                      <X className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
-
-          {/* Nota */}
-          <div className="p-3 bg-amber-950/40 border border-amber-600/60 rounded-xl">
-            <p className="text-[11px] font-['Chakra_Petch'] text-amber-200">
-              ⚠️ <strong>Nota:</strong> Eliminar un valor del catálogo NO lo
-              quita de los personajes que ya lo tengan asignado. Edita los
-              personajes manualmente si necesitas cambiarlos.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* ====================================================================
-          TAB: AJUSTES
-          ==================================================================== */}
-      {activeTab === "settings" && (
-        <div className="bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000]">
-          <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400 mb-4 border-b-2 border-slate-800 pb-3">
-            CONFIGURACIÓN GENERAL DEL JUEGO
-          </h2>
-
-          <form onSubmit={handleSaveSettings} className="space-y-6 max-w-xl">
-            {/* Monedas iniciales */}
-            <div>
-              <label
-                htmlFor="input-initial-coins"
-                className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-1.5"
-              >
-                <Coins className="w-4 h-4 text-yellow-400" aria-hidden="true" />
-                <span>Monedas Iniciales por Jugador:</span>
-              </label>
-              <input
-                type="number"
-                id="input-initial-coins"
-                min="5"
-                max="999"
-                value={initialCoins}
-                onChange={(e) => setInitialCoins(e.target.value)}
-                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-yellow-400 outline-none focus:ring-2 focus:ring-yellow-400/40"
+            {showResetConfirm ? (
+              <ConfirmAction
+                label="¿RESET?"
+                confirmLabel={isResetting ? "RESET..." : "SÍ, RESET"}
+                onConfirm={handleAdminReset}
+                onCancel={() => setShowResetConfirm(false)}
+                color="amber"
+                loading={isResetting}
               />
-              <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Por defecto: 20 monedas.
-              </p>
-            </div>
-
-            {/* Tiempo */}
-            <div>
-              <label
-                htmlFor="input-auction-time"
-                className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-1.5"
-              >
-                <Clock className="w-4 h-4 text-cyan-400" aria-hidden="true" />
-                <span>Tiempo de la Subasta (Segundos):</span>
-              </label>
-              <input
-                type="number"
-                id="input-auction-time"
-                min="5"
-                max="120"
-                value={auctionTime}
-                onChange={(e) => setAuctionTime(e.target.value)}
-                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-cyan-400 outline-none focus:ring-2 focus:ring-cyan-400/40"
+            ) : (
+              <QuickAction
+                id="btn-reset"
+                icon={RotateCcw}
+                label="RESET PARTIDA"
+                color="amber"
+                onClick={() => {
+                  sounds.playClick();
+                  setShowResetConfirm(true);
+                }}
               />
-              <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Por defecto: 20 segundos.
-              </p>
-            </div>
-
-            {/* Máximo de subastas */}
-            <div>
-              <label
-                htmlFor="input-max-auctions"
-                className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-1.5"
-              >
-                <Package className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-                <span>Personajes por Ronda:</span>
-              </label>
-              <input
-                type="number"
-                id="input-max-auctions"
-                min="1"
-                max="200"
-                value={maxAuctionsPerRound}
-                onChange={(e) => setMaxAuctionsPerRound(e.target.value)}
-                className="w-full bg-[#0d101a] border-2 border-slate-700 focus:border-emerald-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] text-emerald-400 outline-none focus:ring-2 focus:ring-emerald-400/40"
-              />
-              <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">
-                Máximo de subastas antes de bloquear la ronda. Recomendado: 20.
-              </p>
-            </div>
-
-            {/* Animación */}
-            <div>
-              <span className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-2">
-                <Film className="w-4 h-4 text-purple-400" aria-hidden="true" />
-                <span>Estilo de Animación del Sorteo (Gacha):</span>
-              </span>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {[
-                  {
-                    id: "roulette",
-                    color: "yellow",
-                    title: "[ RULETA ]",
-                    desc: "Cinta horizontal rápida con freno gradual.",
-                  },
-                  {
-                    id: "slot",
-                    color: "cyan",
-                    title: "[ SLOT ]",
-                    desc: "Carrete vertical estilo tragamonedas.",
-                  },
-                  {
-                    id: "card_flip",
-                    color: "fuchsia",
-                    title: "[ CARTA 3D ]",
-                    desc: "Giro 3D con aura y revelación estelar.",
-                  },
-                ].map((opt) => {
-                  const isSelected = animationType === opt.id;
-                  const palette = {
-                    yellow: {
-                      title: "text-yellow-300",
-                      selected:
-                        "bg-yellow-400/20 border-yellow-400 ring-2 ring-yellow-400/50",
-                    },
-                    cyan: {
-                      title: "text-cyan-300",
-                      selected:
-                        "bg-cyan-400/20 border-cyan-400 ring-2 ring-cyan-400/50",
-                    },
-                    fuchsia: {
-                      title: "text-fuchsia-300",
-                      selected:
-                        "bg-fuchsia-400/20 border-fuchsia-400 ring-2 ring-fuchsia-400/50",
-                    },
-                  }[opt.color];
-
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        sounds.playClick();
-                        setAnimationType(opt.id);
-                      }}
-                      aria-pressed={isSelected}
-                      className={`p-3 rounded-xl border-2 cursor-pointer transition text-left focus:outline-none focus:ring-2 focus:ring-yellow-400/40 ${
-                        isSelected
-                          ? palette.selected
-                          : "bg-black/40 border-slate-700 hover:border-slate-500"
-                      }`}
-                    >
-                      <div
-                        className={`font-['Press_Start_2P'] text-[10px] mb-1 ${palette.title}`}
-                      >
-                        {opt.title}
-                      </div>
-                      <div className="text-xs font-['Chakra_Petch'] text-slate-300">
-                        {opt.desc}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {savedSuccess && (
-              <div
-                role="status"
-                aria-live="polite"
-                className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-300 text-xs font-['Chakra_Petch'] font-bold flex items-center gap-2"
-              >
-                <ShieldCheck className="w-4 h-4" aria-hidden="true" />
-                <span>¡Ajustes guardados correctamente!</span>
-              </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="py-3 px-6 bg-yellow-400 hover:bg-yellow-300 active:translate-y-0.5 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[4px_4px_0_#000] transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-200 disabled:opacity-60"
-            >
-              {isSaving && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-              <span>{isSaving ? "Guardando..." : "Guardar Ajustes"}</span>
-            </button>
-          </form>
-        </div>
-      )}
+            {showCleanConfirm ? (
+              <ConfirmAction
+                label="¿BORRAR DB?"
+                confirmLabel={isWiping ? "BORRANDO..." : "SÍ, BORRAR"}
+                onConfirm={handleCleanDb}
+                onCancel={() => setShowCleanConfirm(false)}
+                color="rose"
+                loading={isWiping}
+              />
+            ) : (
+              <QuickAction
+                id="btn-wipe"
+                icon={Trash2}
+                label="BORRAR DB"
+                color="rose"
+                onClick={() => {
+                  sounds.playClick();
+                  setShowCleanConfirm(true);
+                }}
+              />
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* ─── Contenido de tabs ───────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {activeTab === "characters" && (
+          <CharactersTab
+            key="characters-tab"
+            available={available}
+            used={used}
+            discarded={discarded}
+            totalCharacters={totalCharacters}
+            filteredAvailable={filteredAvailable}
+            hasActiveFilters={hasActiveFilters}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            rarityFilter={rarityFilter}
+            toggleRarity={toggleRarity}
+            minAcceptance={minAcceptance}
+            setMinAcceptance={setMinAcceptance}
+            maxAcceptance={maxAcceptance}
+            setMaxAcceptance={setMaxAcceptance}
+            attributeFilter={attributeFilter}
+            setAttributeFilter={setAttributeFilter}
+            raceFilter={raceFilter}
+            setRaceFilter={setRaceFilter}
+            traitFilter={traitFilter}
+            setTraitFilter={setTraitFilter}
+            attributesList={attributesList}
+            racesList={racesList}
+            traitsList={traitsList}
+            clearFilters={clearFilters}
+            onOpenAddModal={handleOpenAddModal}
+            onOpenEditModal={handleOpenEditModal}
+            onDelete={handleDelete}
+            deletingId={deletingId}
+            onSeed={handleSeed}
+            isSeeding={isSeeding}
+          />
+        )}
+
+        {activeTab === "catalogs" && (
+          <CatalogsTab
+            key="catalogs-tab"
+            catalogSubTab={catalogSubTab}
+            setCatalogSubTab={setCatalogSubTab}
+            newCatalogValue={newCatalogValue}
+            setNewCatalogValue={setNewCatalogValue}
+            onAddCatalogItem={handleAddCatalogItem}
+            onRemoveCatalogItem={handleRemoveCatalogItem}
+            attributesList={attributesList}
+            racesList={racesList}
+            traitsList={traitsList}
+          />
+        )}
+
+        {activeTab === "settings" && (
+          <SettingsTab
+            key="settings-tab"
+            initialCoins={initialCoins}
+            setInitialCoins={setInitialCoins}
+            auctionTime={auctionTime}
+            setAuctionTime={setAuctionTime}
+            maxAuctionsPerRound={maxAuctionsPerRound}
+            setMaxAuctionsPerRound={setMaxAuctionsPerRound}
+            animationType={animationType}
+            setAnimationType={setAnimationType}
+            savedSuccess={savedSuccess}
+            isSaving={isSaving}
+            onSubmit={handleSaveSettings}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Modal */}
       <CharacterFormModal
         isOpen={modalOpen}
         onClose={() => {
@@ -1169,5 +564,745 @@ export default function AdminPanel({
         catalogs={catalogs}
       />
     </div>
+  );
+}
+
+// ============================================================================
+// SUB: AdminTabs
+// ============================================================================
+function AdminTabs({ activeTab, setActiveTab, totalCharacters }) {
+  const tabs = [
+    { id: "characters", label: `Personajes (${totalCharacters})`, color: "cyan", icon: Package },
+    { id: "catalogs", label: "Catálogos", color: "purple", icon: Tag },
+    { id: "settings", label: "Ajustes", color: "yellow", icon: Settings },
+  ];
+
+  return (
+    <div role="tablist" className="relative flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700">
+      {tabs.map((tab) => {
+        const isActive = activeTab === tab.id;
+        const Icon = tab.icon;
+        const colors = {
+          cyan: isActive ? "bg-cyan-400 text-black shadow-[2px_2px_0_#000]" : "text-slate-400 hover:text-cyan-300",
+          purple: isActive ? "bg-purple-400 text-black shadow-[2px_2px_0_#000]" : "text-slate-400 hover:text-purple-300",
+          yellow: isActive ? "bg-yellow-400 text-black shadow-[2px_2px_0_#000]" : "text-slate-400 hover:text-yellow-300",
+        }[tab.color];
+
+        return (
+          <motion.button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            onClick={() => {
+              sounds.playClick();
+              setActiveTab(tab.id);
+            }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-${tab.color}-400 ${colors}`}
+          >
+            <Icon className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
+            <span>{tab.label}</span>
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============================================================================
+// SUB: QuickAction
+// ============================================================================
+function QuickAction({ id, icon: Icon, label, color, onClick, disabled, loading }) {
+  const palettes = {
+    emerald: "from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500",
+    cyan: "from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400",
+    amber: "from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500",
+    rose: "from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600",
+  }[color];
+
+  const textColor = color === "rose" ? "text-white" : "text-black";
+
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      whileHover={!disabled ? { scale: 1.02, y: -2 } : {}}
+      whileTap={!disabled ? { scale: 0.98 } : {}}
+      className={`relative p-3.5 bg-gradient-to-br ${palettes} rounded-xl border-4 border-black shadow-[4px_4px_0_#000] ${textColor} font-['Press_Start_2P'] text-[10px] sm:text-xs flex items-center justify-center gap-2 transition focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
+      <Icon className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2.5} aria-hidden="true" />
+      <span>{label}</span>
+    </motion.button>
+  );
+}
+
+// ============================================================================
+// SUB: ConfirmAction
+// ============================================================================
+function ConfirmAction({ label, confirmLabel, onConfirm, onCancel, color, loading }) {
+  const palettes = {
+    amber: "from-amber-500 to-orange-600",
+    rose: "from-rose-600 to-red-700",
+  }[color];
+
+  const textColor = color === "rose" ? "text-white" : "text-black";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="col-span-1 flex gap-1.5"
+      role="alertdialog"
+    >
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={loading}
+        className={`flex-1 p-2.5 bg-gradient-to-br ${palettes} rounded-xl border-4 border-black ${textColor} font-['Press_Start_2P'] text-[9px] shadow-[3px_3px_0_#000] focus:outline-none focus:ring-2 focus:ring-white/50 disabled:opacity-60 active:translate-y-0.5 transition`}
+      >
+        {confirmLabel}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="px-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl border-2 border-slate-600 text-slate-300 text-xs transition focus:outline-none focus:ring-2 focus:ring-slate-400"
+        aria-label="Cancelar"
+      >
+        <X className="w-3.5 h-3.5" strokeWidth={3} aria-hidden="true" />
+      </button>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB: CharactersTab
+// ============================================================================
+function CharactersTab({
+  available,
+  used,
+  discarded,
+  totalCharacters,
+  filteredAvailable,
+  hasActiveFilters,
+  searchQuery,
+  setSearchQuery,
+  rarityFilter,
+  toggleRarity,
+  minAcceptance,
+  setMinAcceptance,
+  maxAcceptance,
+  setMaxAcceptance,
+  attributeFilter,
+  setAttributeFilter,
+  raceFilter,
+  setRaceFilter,
+  traitFilter,
+  setTraitFilter,
+  attributesList,
+  racesList,
+  traitsList,
+  clearFilters,
+  onOpenAddModal,
+  onOpenEditModal,
+  onDelete,
+  deletingId,
+  onSeed,
+  isSeeding,
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="relative bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4"
+    >
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-slate-800 pb-3">
+        <div className="flex items-center gap-2">
+          <Package className="w-5 h-5 text-yellow-400" strokeWidth={2.5} aria-hidden="true" />
+          <div>
+            <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400">
+              POOL ({filteredAvailable.length}
+              {hasActiveFilters ? ` / ${available.length}` : ""})
+            </h2>
+            <p className="text-[11px] text-slate-400 font-['Chakra_Petch']">
+              Total: {totalCharacters} • Usados: {used.length} • Desechados: {discarded.length}
+            </p>
+          </div>
+        </div>
+
+        <motion.button
+          type="button"
+          onClick={onOpenAddModal}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.97 }}
+          className="px-3 py-1.5 bg-gradient-to-r from-yellow-400 to-amber-500 text-black text-xs font-['Press_Start_2P'] rounded-lg border-2 border-black flex items-center gap-1.5 shadow-[2px_2px_0_#000] focus:outline-none focus:ring-2 focus:ring-yellow-200"
+        >
+          <Plus className="w-3.5 h-3.5" strokeWidth={3} aria-hidden="true" />
+          <span>Nuevo</span>
+        </motion.button>
+      </div>
+
+      {/* Filtros */}
+      <div className="space-y-3 bg-black/30 border-2 border-slate-800 rounded-xl p-3">
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nombre..."
+              aria-label="Buscar personaje por nombre"
+              className="w-full pl-9 pr-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-cyan-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-cyan-400/40 transition"
+            />
+          </div>
+
+          <AnimatePresence>
+            {hasActiveFilters && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                type="button"
+                onClick={clearFilters}
+                className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border-2 border-slate-600 rounded-lg text-xs font-['Chakra_Petch'] text-slate-200 flex items-center gap-1.5 transition focus:outline-none focus:ring-2 focus:ring-rose-400"
+              >
+                <X className="w-3.5 h-3.5" strokeWidth={3} aria-hidden="true" />
+                <span>Limpiar</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* Rarezas */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">Rareza:</span>
+            {ALL_RARITIES.map((r) => {
+              const isActive = rarityFilter.includes(r);
+              const cfg = RARITY_CONFIG[r];
+              return (
+                <motion.button
+                  key={r}
+                  type="button"
+                  onClick={() => toggleRarity(r)}
+                  aria-pressed={isActive}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-['Press_Start_2P'] border-2 transition focus:outline-none focus:ring-2 focus:ring-cyan-400 ${
+                    isActive ? `${cfg.badgeClass} shadow-lg` : "bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500"
+                  }`}
+                >
+                  {r}
+                </motion.button>
+              );
+            })}
+          </div>
+
+          {/* Acept */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">Acept:</span>
+            <input
+              type="number"
+              min="0"
+              max="20"
+              value={minAcceptance}
+              onChange={(e) => setMinAcceptance(e.target.value)}
+              placeholder="min"
+              aria-label="Aceptación mínima"
+              className="w-14 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+            />
+            <span className="text-slate-500 text-xs">–</span>
+            <input
+              type="number"
+              min="0"
+              max="20"
+              value={maxAcceptance}
+              onChange={(e) => setMaxAcceptance(e.target.value)}
+              placeholder="max"
+              aria-label="Aceptación máxima"
+              className="w-14 px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none"
+            />
+          </div>
+
+          {/* Filtros select */}
+          <FilterSelect label="Atrib" value={attributeFilter} onChange={setAttributeFilter} options={attributesList} placeholder="Todos" />
+          <FilterSelect label="Raza" value={raceFilter} onChange={setRaceFilter} options={racesList} placeholder="Todas" />
+          <FilterSelect label="Caract" value={traitFilter} onChange={setTraitFilter} options={traitsList} placeholder="Todas" />
+        </div>
+      </div>
+
+      {/* Lista */}
+      {available.length === 0 ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title="Sin personajes en el pool"
+          description="No hay personajes disponibles en el pool activo."
+          actionLabel={isSeeding ? "Cargando..." : "Cargar Personajes Iniciales"}
+          onAction={onSeed}
+          disabled={isSeeding}
+          color="yellow"
+        />
+      ) : filteredAvailable.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="Sin resultados"
+          description="No hay personajes que coincidan con los filtros."
+          actionLabel="Limpiar filtros"
+          onAction={clearFilters}
+          color="slate"
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <AnimatePresence>
+            {filteredAvailable.map((char, idx) => (
+              <CharacterMiniCard
+                key={char.id}
+                char={char}
+                idx={idx}
+                onEdit={onOpenEditModal}
+                onDelete={onDelete}
+                deletingId={deletingId}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB: CharacterMiniCard
+// ============================================================================
+function CharacterMiniCard({ char, idx, onEdit, onDelete, deletingId }) {
+  const config = RARITY_CONFIG[char.rarity || "R"];
+  const imgSrc = char.image_url || char.imageUrl || "";
+  const races = Array.isArray(char.races) ? char.races : [];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+      whileHover={{ y: -2 }}
+      className={`relative rounded-xl border-2 ${config.cardBorder} ${config.cardBg} p-3 flex flex-col justify-between gap-2 shadow-[2px_2px_0_#000] overflow-hidden group`}
+    >
+      {/* Fondo animado sutil para UR/LR */}
+      {config.animatedBg && (
+        <div className="absolute inset-0 opacity-20 animate-gradient-fast" style={{ backgroundImage: config.animatedBg }} aria-hidden="true" />
+      )}
+
+      <div className="relative flex items-center gap-3">
+        <div className="w-14 h-14 rounded-lg overflow-hidden border border-black/60 flex-shrink-0 bg-black">
+          {imgSrc ? (
+            <img
+              src={imgSrc}
+              alt={char.name}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          ) : null}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 mb-1 flex-wrap">
+            <span className={`px-2 py-0.5 rounded text-[9px] font-['Press_Start_2P'] ${config.badgeClass}`}>{config.label}</span>
+            <span className="text-[10px] font-['Chakra_Petch'] text-slate-300 font-bold">Acept: 0-{char.acceptance}</span>
+          </div>
+          <h4 className="font-['Press_Start_2P'] text-xs text-white truncate drop-shadow-[1px_1px_0_#000]">{char.name}</h4>
+          {(char.attribute && char.attribute !== "Desconocido") || races.length > 0 ? (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {char.attribute && char.attribute !== "Desconocido" && (
+                <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 border border-yellow-500/50 text-[9px] font-['Chakra_Petch'] text-yellow-300">{char.attribute}</span>
+              )}
+              {races.slice(0, 2).map((r) => (
+                <span key={r} className="px-1.5 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/50 text-[9px] font-['Chakra_Petch'] text-cyan-300">{r}</span>
+              ))}
+              {races.length > 2 && <span className="text-[9px] text-slate-500">+{races.length - 2}</span>}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="relative flex items-center justify-end gap-2 border-t border-slate-700/60 pt-2">
+        <motion.button
+          type="button"
+          onClick={() => onEdit(char)}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          aria-label={`Editar ${char.name}`}
+          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-['Chakra_Petch'] font-bold flex items-center gap-1 border border-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400"
+        >
+          <Edit className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
+          <span>Editar</span>
+        </motion.button>
+        <motion.button
+          type="button"
+          onClick={() => onDelete(char)}
+          disabled={deletingId === char.id}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          aria-label={`Eliminar ${char.name}`}
+          className="px-2 py-1 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 rounded text-[10px] font-['Chakra_Petch'] font-bold flex items-center gap-1 border border-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-50"
+        >
+          {deletingId === char.id ? (
+            <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" />
+          ) : (
+            <Trash2 className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
+          )}
+          <span>Eliminar</span>
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB: FilterSelect
+// ============================================================================
+function FilterSelect({ label, value, onChange, options, placeholder }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] font-['Press_Start_2P'] text-slate-400 uppercase">{label}:</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={`Filtrar por ${label}`}
+        className="px-2 py-1 bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-lg text-xs font-['Chakra_Petch'] text-yellow-300 outline-none max-w-[120px]"
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.value}>{o.value}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ============================================================================
+// SUB: CatalogsTab
+// ============================================================================
+function CatalogsTab({
+  catalogSubTab,
+  setCatalogSubTab,
+  newCatalogValue,
+  setNewCatalogValue,
+  onAddCatalogItem,
+  onRemoveCatalogItem,
+  attributesList,
+  racesList,
+  traitsList,
+}) {
+  const counts = { attribute: attributesList.length, race: racesList.length, trait: traitsList.length };
+  const items = catalogSubTab === "attribute" ? attributesList : catalogSubTab === "race" ? racesList : traitsList;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="relative bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000] space-y-4"
+    >
+      <div className="border-b-2 border-slate-800 pb-3">
+        <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-purple-400 flex items-center gap-2">
+          <Tag className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+          CATÁLOGOS
+        </h2>
+        <p className="text-xs text-slate-400 font-['Chakra_Petch']">Los cambios se sincronizan en tiempo real.</p>
+      </div>
+
+      <div role="tablist" className="flex flex-wrap items-center gap-2 bg-black/40 p-1 rounded-xl border border-slate-700">
+        {CATALOG_TABS.map((t) => {
+          const Icon = t.icon;
+          const isActive = catalogSubTab === t.id;
+          return (
+            <motion.button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => { sounds.playClick(); setCatalogSubTab(t.id); setNewCatalogValue(""); }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-['Press_Start_2P'] transition flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                isActive ? `bg-gradient-to-r ${t.bg} text-black shadow-[2px_2px_0_#000]` : "text-slate-400 hover:text-white"
+              }`}
+            >
+              <Icon className="w-3 h-3" strokeWidth={2.5} aria-hidden="true" />
+              <span>{t.label}</span>
+              <span className={`px-1.5 py-0.5 rounded text-[9px] ${isActive ? "bg-black/30" : "bg-black/60"}`}>{counts[t.id]}</span>
+            </motion.button>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2 items-stretch">
+        <input
+          type="text"
+          value={newCatalogValue}
+          onChange={(e) => setNewCatalogValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onAddCatalogItem(); } }}
+          placeholder={catalogSubTab === "attribute" ? "Nuevo atributo..." : catalogSubTab === "race" ? "Nueva raza..." : "Nueva característica..."}
+          aria-label="Nuevo valor"
+          maxLength={40}
+          className="flex-1 px-3 py-2 bg-[#0d101a] border-2 border-slate-700 focus:border-purple-400 rounded-lg text-sm font-['Chakra_Petch'] text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-purple-400/40"
+        />
+        <motion.button
+          type="button"
+          onClick={onAddCatalogItem}
+          disabled={!newCatalogValue.trim()}
+          whileHover={newCatalogValue.trim() ? { scale: 1.03 } : {}}
+          whileTap={newCatalogValue.trim() ? { scale: 0.97 } : {}}
+          className="px-4 py-2 bg-gradient-to-r from-purple-500 to-fuchsia-500 text-black font-['Press_Start_2P'] text-xs rounded-lg border-2 border-black shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-purple-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+        >
+          <Plus className="w-3.5 h-3.5" strokeWidth={3} aria-hidden="true" />
+          <span>Añadir</span>
+        </motion.button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="text-center py-8 border-2 border-dashed border-slate-800 rounded-xl bg-black/30">
+          <Tag className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-60" aria-hidden="true" />
+          <p className="font-['Chakra_Petch'] text-xs text-slate-500">No hay valores. Añade el primero arriba.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          <AnimatePresence>
+            {items.map((item, idx) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                whileHover={{ y: -2 }}
+                className="flex items-center justify-between gap-2 px-3 py-2 bg-black/40 border-2 border-slate-700 rounded-lg group hover:border-purple-400/60 transition"
+              >
+                <span className="font-['Chakra_Petch'] text-sm text-white truncate">{item.value}</span>
+                <motion.button
+                  type="button"
+                  onClick={() => onRemoveCatalogItem(item)}
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  whileTap={{ scale: 0.9 }}
+                  aria-label={`Eliminar ${item.value}`}
+                  className="p-1 rounded text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition focus:outline-none focus:ring-2 focus:ring-rose-400 flex-shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" strokeWidth={3} aria-hidden="true" />
+                </motion.button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <div className="p-3 bg-amber-950/40 border border-amber-600/60 rounded-xl">
+        <p className="text-[11px] font-['Chakra_Petch'] text-amber-200">
+          ⚠️ <strong>Nota:</strong> Eliminar un valor no lo quita de los personajes que ya lo tengan asignado.
+        </p>
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB: SettingsTab
+// ============================================================================
+function SettingsTab({
+  initialCoins,
+  setInitialCoins,
+  auctionTime,
+  setAuctionTime,
+  maxAuctionsPerRound,
+  setMaxAuctionsPerRound,
+  animationType,
+  setAnimationType,
+  savedSuccess,
+  isSaving,
+  onSubmit,
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="relative bg-[#121526] border-4 border-black rounded-2xl p-4 sm:p-6 shadow-[6px_6px_0_#000]"
+    >
+      <h2 className="font-['Press_Start_2P'] text-xs sm:text-sm text-yellow-400 mb-4 border-b-2 border-slate-800 pb-3 flex items-center gap-2">
+        <Settings className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+        CONFIGURACIÓN
+      </h2>
+
+      <form onSubmit={onSubmit} className="space-y-5 max-w-xl">
+        <SettingInput
+          id="initial-coins"
+          icon={Coins}
+          iconColor="text-yellow-400"
+          label="Monedas Iniciales"
+          description="Al reiniciar o cambiar de ronda, los jugadores vuelven a este saldo."
+          value={initialCoins}
+          onChange={setInitialCoins}
+          min="5"
+          max="999"
+          textColor="text-yellow-400"
+        />
+
+        <SettingInput
+          id="auction-time"
+          icon={Clock}
+          iconColor="text-cyan-400"
+          label="Tiempo de Subasta (seg)"
+          description="Tiempo del cronómetro de pujas."
+          value={auctionTime}
+          onChange={setAuctionTime}
+          min="5"
+          max="120"
+          textColor="text-cyan-400"
+        />
+
+        <SettingInput
+          id="max-auctions"
+          icon={Package}
+          iconColor="text-emerald-400"
+          label="Personajes por Ronda"
+          description="Máximo de subastas antes de bloquear la ronda."
+          value={maxAuctionsPerRound}
+          onChange={setMaxAuctionsPerRound}
+          min="1"
+          max="200"
+          textColor="text-emerald-400"
+        />
+
+        {/* Animación */}
+        <div>
+          <div className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-2">
+            <Film className="w-4 h-4 text-purple-400" aria-hidden="true" />
+            <span>Animación de Sorteo</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { id: "roulette", title: "RULETA", desc: "Cinta horizontal con freno gradual.", color: "yellow" },
+              { id: "slot", title: "SLOT", desc: "Carrete vertical con palanca.", color: "cyan" },
+              { id: "card_flip", title: "CARTA 3D", desc: "Giro 3D con aura estelar.", color: "fuchsia" },
+            ].map((opt) => {
+              const isSelected = animationType === opt.id;
+              const palette = {
+                yellow: { title: "text-yellow-300", selected: "bg-yellow-400/20 border-yellow-400 ring-2 ring-yellow-400/50" },
+                cyan: { title: "text-cyan-300", selected: "bg-cyan-400/20 border-cyan-400 ring-2 ring-cyan-400/50" },
+                fuchsia: { title: "text-fuchsia-300", selected: "bg-fuchsia-400/20 border-fuchsia-400 ring-2 ring-fuchsia-400/50" },
+              }[opt.color];
+
+              return (
+                <motion.button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => { sounds.playClick(); setAnimationType(opt.id); }}
+                  aria-pressed={isSelected}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`p-3 rounded-xl border-2 cursor-pointer transition text-left focus:outline-none focus:ring-2 focus:ring-yellow-400/40 ${
+                    isSelected ? palette.selected : "bg-black/40 border-slate-700 hover:border-slate-500"
+                  }`}
+                >
+                  <div className={`font-['Press_Start_2P'] text-[10px] mb-1 ${palette.title}`}>[ {opt.title} ]</div>
+                  <div className="text-xs font-['Chakra_Petch'] text-slate-300">{opt.desc}</div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        <AnimatePresence>
+          {savedSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              role="status"
+              className="p-3 bg-emerald-950/80 border border-emerald-500 rounded-xl text-emerald-300 text-xs font-['Chakra_Petch'] font-bold flex items-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />
+              <span>¡Ajustes guardados correctamente!</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.button
+          type="submit"
+          disabled={isSaving}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="py-3 px-6 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-['Press_Start_2P'] text-xs rounded-xl border-4 border-black shadow-[4px_4px_0_#000] transition flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-200 disabled:opacity-60"
+        >
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : <Save className="w-4 h-4" strokeWidth={2.5} aria-hidden="true" />}
+          <span>{isSaving ? "Guardando..." : "Guardar Ajustes"}</span>
+        </motion.button>
+      </form>
+    </motion.div>
+  );
+}
+
+// ============================================================================
+// SUB: SettingInput
+// ============================================================================
+function SettingInput({ id, icon: Icon, iconColor, label, description, value, onChange, min, max, textColor }) {
+  return (
+    <div>
+      <label htmlFor={`input-${id}`} className="flex items-center gap-2 text-xs font-['Press_Start_2P'] text-slate-200 mb-1.5">
+        <Icon className={`w-4 h-4 ${iconColor}`} strokeWidth={2.5} aria-hidden="true" />
+        <span>{label}:</span>
+      </label>
+      <input
+        type="number"
+        id={`input-${id}`}
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full bg-[#0d101a] border-2 border-slate-700 focus:border-yellow-400 rounded-xl p-3 text-sm font-['Press_Start_2P'] ${textColor} outline-none focus:ring-2 focus:ring-yellow-400/40 transition`}
+      />
+      <p className="text-xs text-slate-400 font-['Chakra_Petch'] mt-1">{description}</p>
+    </div>
+  );
+}
+
+// ============================================================================
+// SUB: EmptyState
+// ============================================================================
+function EmptyState({ icon: Icon, title, description, actionLabel, onAction, disabled, color }) {
+  const palettes = {
+    yellow: "text-yellow-400",
+    slate: "text-slate-600",
+  }[color];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="text-center py-12 border-2 border-dashed border-slate-800 rounded-xl bg-black/30"
+    >
+      <motion.div animate={{ y: [0, -6, 0] }} transition={{ duration: 2, repeat: Infinity }} className="inline-block mb-3">
+        <Icon className={`w-12 h-12 ${palettes}`} strokeWidth={1.5} aria-hidden="true" />
+      </motion.div>
+      <p className="font-['Press_Start_2P'] text-xs text-slate-400 mb-2">{title}</p>
+      <p className="text-xs text-slate-500 font-['Chakra_Petch'] mb-4">{description}</p>
+      <motion.button
+        type="button"
+        onClick={onAction}
+        disabled={disabled}
+        whileHover={{ scale: 1.03 }}
+        whileTap={{ scale: 0.97 }}
+        className="px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-500 text-black font-['Press_Start_2P'] text-xs rounded-xl border-2 border-black shadow-[3px_3px_0_#000] disabled:opacity-60"
+      >
+        {actionLabel}
+      </motion.button>
+    </motion.div>
   );
 }

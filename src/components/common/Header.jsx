@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   Gamepad2,
   Volume2,
@@ -11,9 +12,14 @@ import {
   ChevronDown,
   Lock,
   LogOut,
+  Sparkles,
+  Percent,
 } from "lucide-react";
 import sounds from "../../services/soundEffects";
 
+// ============================================================================
+// HEADER PRINCIPAL
+// ============================================================================
 export default function Header({
   mySlot = null,
   onTakeSlot,
@@ -21,6 +27,7 @@ export default function Header({
   players,
   connectedUsersCount = 1,
   onOpenConnectedModal,
+  onOpenProbabilityModal,
   availableCount = 0,
   historyCount = 0,
   onOpenPoolModal,
@@ -30,7 +37,7 @@ export default function Header({
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
-  // Cerrar menú al hacer click fuera o pulsar ESC
+  // Cerrar menú con click fuera o ESC
   useEffect(() => {
     if (!roleMenuOpen) return;
 
@@ -51,12 +58,7 @@ export default function Header({
     };
   }, [roleMenuOpen]);
 
-  // ==========================================================================
-  // Detectar ocupación de slots
-  // ✅ FIX #2: usamos `is_occupied` que ya calcula gameService
-  // (client_id presente Y slot_locked_until en el futuro).
-  // Si el lock expiró → slot libre aunque client_id siga puesto.
-  // ==========================================================================
+  // Detectar ocupación
   const p1 = players?.player1;
   const p2 = players?.player2;
   const p1Occupied = !!p1?.is_occupied;
@@ -66,7 +68,7 @@ export default function Header({
   const isP2Me = mySlot === "player2";
   const isSpectator = !mySlot;
 
-  // Icono y texto del rol actual
+  // Iconos del rol actual
   const currentRoleIcon = isP1Me ? (
     <Gamepad2 className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
   ) : isP2Me ? (
@@ -81,7 +83,7 @@ export default function Header({
     ? "Jugador 2"
     : "Espectador";
 
-  // Elegir rol (tomar slot o cambiar)
+  // Handlers
   const handleSelectRole = (slot) => {
     setRoleMenuOpen(false);
     if (slot === mySlot) return;
@@ -89,7 +91,6 @@ export default function Header({
     onTakeSlot && onTakeSlot(slot);
   };
 
-  // Volver a espectador (liberar slot)
   const handleBecomeSpectator = () => {
     setRoleMenuOpen(false);
     if (isSpectator) return;
@@ -97,21 +98,38 @@ export default function Header({
     onBecomeSpectator && onBecomeSpectator();
   };
 
+  // ==========================================================================
+  // RENDER
+  // ==========================================================================
   return (
-    <header className="bg-[#111422]/95 border-b-4 border-black backdrop-blur-md sticky top-0 z-40 px-2 sm:px-4 py-2.5 shadow-[0_4px_12px_rgba(0,0,0,0.6)]">
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-        {/* LOGO ARCADE */}
+    <motion.header
+      initial={{ y: -60, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 200, damping: 25 }}
+      className="relative bg-[#111422]/95 border-b-4 border-black backdrop-blur-md sticky top-0 z-40 shadow-[0_4px_20px_rgba(0,0,0,0.7)]"
+    >
+      {/* Línea superior decorativa */}
+      <div
+        className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-yellow-400 to-transparent"
+        aria-hidden="true"
+      />
+
+      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 px-2 sm:px-4 py-2.5">
+        {/* ─── LOGO ──────────────────────────────────────────────────── */}
         <a
           href="/"
-          className="flex items-center gap-2 cursor-pointer select-none"
+          className="group flex items-center gap-2 cursor-pointer select-none flex-shrink-0"
           aria-label="Ir al tablero principal"
         >
-          <div className="p-1.5 sm:p-2 bg-gradient-to-br from-yellow-400 to-amber-600 rounded-lg border-2 border-black shadow-[2px_2px_0_#000] transform -rotate-3 hover:rotate-0 transition">
-            <Gamepad2 className="w-5 h-5 text-black" aria-hidden="true" />
-          </div>
+          <motion.div
+            whileHover={{ rotate: 0, scale: 1.05 }}
+            className="p-1.5 sm:p-2 bg-gradient-to-br from-yellow-400 via-amber-500 to-orange-600 rounded-lg border-2 border-black shadow-[2px_2px_0_#000] transform -rotate-3 transition"
+          >
+            <Gamepad2 className="w-5 h-5 text-black" strokeWidth={2.5} aria-hidden="true" />
+          </motion.div>
           <div>
             <div className="flex items-center gap-1 sm:gap-1.5">
-              <span className="font-['Press_Start_2P'] text-xs sm:text-base text-yellow-400 tracking-wider drop-shadow-[2px_2px_0_#000]">
+              <span className="font-['Press_Start_2P'] text-xs sm:text-base text-yellow-400 tracking-wider drop-shadow-[2px_2px_0_#000] group-hover:text-glow-gold transition">
                 ARCADE
               </span>
               <span className="font-['Press_Start_2P'] text-xs sm:text-base text-cyan-400 tracking-wider drop-shadow-[2px_2px_0_#000]">
@@ -124,190 +142,257 @@ export default function Header({
           </div>
         </a>
 
-        {/* BOTONES Y CONTROLES DEL NAVBAR */}
+        {/* ─── CONTROLES ─────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
-          {/* BOTÓN 1: POOL RESTANTE */}
-          <button
-            type="button"
+          {/* POOL */}
+          <NavButton
             id="btn-pool"
-            name="btn-pool"
+            icon={Package}
+            label="POOL"
+            count={availableCount}
+            color="yellow"
+            title="Ver personajes disponibles"
             onClick={() => {
               sounds.playClick();
               onOpenPoolModal && onOpenPoolModal("available");
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 border-yellow-500/80 bg-yellow-950/60 hover:bg-yellow-900/80 text-yellow-300 transition shadow-[2px_2px_0_#000] active:translate-y-0.5"
-            title="Ver personajes disponibles que aún no han salido en la ruleta"
-            aria-label={`Ver pool disponible: ${availableCount} personajes`}
-          >
-            <Package className="w-3.5 h-3.5 text-yellow-400" aria-hidden="true" />
-            <span className="font-['Press_Start_2P'] text-[9px] sm:text-[10px]">
-              <span className="hidden sm:inline">POOL: </span>
-              {availableCount}
-            </span>
-          </button>
+            ariaLabel={`Ver pool disponible: ${availableCount} personajes`}
+          />
 
-          {/* BOTÓN 2: HISTORIAL */}
-          <button
-            type="button"
+          {/* HISTORIAL */}
+          <NavButton
             id="btn-history"
-            name="btn-history"
+            icon={ScrollText}
+            label="HISTORIAL"
+            count={historyCount}
+            color="cyan"
+            title="Ver historial de personajes"
             onClick={() => {
               sounds.playClick();
               onOpenPoolModal && onOpenPoolModal("selected");
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 border-cyan-500/80 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 transition shadow-[2px_2px_0_#000] active:translate-y-0.5"
-            title="Ver personajes seleccionados (en juego) y desechados"
-            aria-label={`Ver historial: ${historyCount} personajes`}
-          >
-            <ScrollText className="w-3.5 h-3.5 text-cyan-400" aria-hidden="true" />
-            <span className="font-['Press_Start_2P'] text-[9px] sm:text-[10px]">
-              <span className="hidden sm:inline">HISTORIAL: </span>
-              {historyCount}
-            </span>
-          </button>
+            ariaLabel={`Ver historial: ${historyCount} personajes`}
+          />
 
-          {/* BOTÓN 3: USUARIOS CONECTADOS */}
-          <button
+          {/* PROBABILIDADES */}
+          <motion.button
+            type="button"
+            id="btn-probabilities"
+            onClick={() => {
+              sounds.playClick();
+              onOpenProbabilityModal && onOpenProbabilityModal();
+            }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 border-fuchsia-500/80 bg-fuchsia-950/60 hover:bg-fuchsia-900/80 text-fuchsia-300 shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
+            title="Ver probabilidades actuales del gacha"
+            aria-label="Ver probabilidades del gacha"
+          >
+            <motion.div
+              animate={{ rotate: [0, 15, -15, 0] }}
+              transition={{ duration: 3, repeat: Infinity }}
+            >
+              <Percent className="w-3.5 h-3.5 text-fuchsia-400" strokeWidth={2.5} aria-hidden="true" />
+            </motion.div>
+            <span className="font-['Press_Start_2P'] text-[9px] sm:text-[10px] hidden sm:inline">
+              PROB.
+            </span>
+          </motion.button>
+
+          {/* USUARIOS */}
+          <motion.button
             type="button"
             id="btn-users"
-            name="btn-users"
             onClick={() => {
               sounds.playClick();
               onOpenConnectedModal();
             }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 border-emerald-500/80 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 transition shadow-[2px_2px_0_#000] active:translate-y-0.5"
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 border-emerald-500/80 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-emerald-400"
             title="Ver personas conectadas en vivo"
             aria-label={`Ver usuarios conectados: ${connectedUsersCount}`}
           >
             <span className="relative flex h-2 w-2" aria-hidden="true">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <Users className="w-3.5 h-3.5" aria-hidden="true" />
+            <Users className="w-3.5 h-3.5" strokeWidth={2.5} aria-hidden="true" />
             <span className="font-['Press_Start_2P'] text-[9px] sm:text-[10px]">
               {connectedUsersCount}
             </span>
-          </button>
+          </motion.button>
 
-          {/* SELECTOR DE ROL */}
+          {/* ─── SELECTOR DE ROL ─────────────────────────────────────── */}
           <div className="relative" ref={menuRef}>
-            <button
+            <motion.button
               type="button"
               id="role-selector"
-              name="role-selector"
               onClick={() => {
                 sounds.playClick();
                 setRoleMenuOpen((v) => !v);
               }}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               aria-haspopup="menu"
               aria-expanded={roleMenuOpen}
               aria-label={`Rol actual: ${currentRoleLabel}. Click para cambiar`}
-              className="flex items-center gap-1.5 bg-[#0d101a] border-2 border-slate-700 hover:border-slate-500 rounded-xl p-0.5 pl-2 pr-1.5 py-1 shadow-inner transition"
-              title="Tu rol en la subasta"
+              className={`flex items-center gap-1.5 rounded-xl p-0.5 pl-2 pr-1.5 py-1 shadow-inner transition border-2 focus:outline-none focus:ring-2 focus:ring-yellow-400 ${
+                roleMenuOpen
+                  ? "bg-[#0d101a] border-yellow-400"
+                  : "bg-[#0d101a] border-slate-700 hover:border-slate-500"
+              }`}
             >
               {currentRoleIcon}
               <span className="font-['Chakra_Petch'] font-bold text-white text-xs py-0.5 max-w-[100px] sm:max-w-[130px] truncate">
                 {currentRoleLabel}
               </span>
-              <ChevronDown
-                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                  roleMenuOpen ? "rotate-180" : ""
-                }`}
+              <motion.span
+                animate={{ rotate: roleMenuOpen ? 180 : 0 }}
+                transition={{ duration: 0.2 }}
                 aria-hidden="true"
-              />
-            </button>
-
-            {roleMenuOpen && (
-              <div
-                role="menu"
-                aria-label="Seleccionar rol"
-                className="absolute right-0 top-full mt-1.5 w-60 bg-[#151928] border-2 border-slate-700 rounded-xl shadow-[4px_4px_0_#000] overflow-hidden z-50 animate-fade-in"
               >
-                <div className="px-3 py-1.5 bg-black/40 border-b border-slate-700">
-                  <p className="font-['Press_Start_2P'] text-[9px] text-slate-300">
-                    TU ROL
-                  </p>
-                </div>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </motion.span>
+            </motion.button>
 
-                {/* Jugador 1 */}
-                <RoleOption
-                  id="role-opt-player1"
-                  icon={<Gamepad2 className="w-3.5 h-3.5" />}
-                  title="Jugador 1"
-                  color="cyan"
-                  subtitle={
-                    isP1Me
-                      ? "Controlas este slot"
-                      : p1Occupied
-                      ? "Ocupado por otro"
-                      : "Disponible"
-                  }
-                  disabled={p1Occupied && !isP1Me}
-                  active={isP1Me}
-                  onClick={() => handleSelectRole("player1")}
-                />
+            <AnimatePresence>
+              {roleMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  role="menu"
+                  aria-label="Seleccionar rol"
+                  className="absolute right-0 top-full mt-2 w-64 bg-[#151928] border-2 border-slate-700 rounded-xl shadow-[4px_4px_0_#000] overflow-hidden z-50"
+                >
+                  <div className="px-3 py-2 bg-gradient-to-r from-yellow-400/20 to-transparent border-b border-slate-700 flex items-center gap-2">
+                    <Sparkles className="w-3 h-3 text-yellow-400" aria-hidden="true" />
+                    <p className="font-['Press_Start_2P'] text-[9px] text-yellow-300">
+                      TU ROL
+                    </p>
+                  </div>
 
-                {/* Jugador 2 */}
-                <RoleOption
-                  id="role-opt-player2"
-                  icon={<Flame className="w-3.5 h-3.5" />}
-                  title="Jugador 2"
-                  color="rose"
-                  subtitle={
-                    isP2Me
-                      ? "Controlas este slot"
-                      : p2Occupied
-                      ? "Ocupado por otro"
-                      : "Disponible"
-                  }
-                  disabled={p2Occupied && !isP2Me}
-                  active={isP2Me}
-                  onClick={() => handleSelectRole("player2")}
-                />
+                  <RoleOption
+                    id="role-opt-player1"
+                    icon={<Gamepad2 className="w-3.5 h-3.5" />}
+                    title="Jugador 1"
+                    color="cyan"
+                    subtitle={
+                      isP1Me
+                        ? "Controlas este slot"
+                        : p1Occupied
+                        ? "Ocupado por otro"
+                        : "Disponible"
+                    }
+                    disabled={p1Occupied && !isP1Me}
+                    active={isP1Me}
+                    onClick={() => handleSelectRole("player1")}
+                  />
 
-                {/* Espectador */}
-                <RoleOption
-                  id="role-opt-spectator"
-                  icon={
-                    isSpectator ? (
-                      <Eye className="w-3.5 h-3.5" />
-                    ) : (
-                      <LogOut className="w-3.5 h-3.5" />
-                    )
-                  }
-                  title={isSpectator ? "Espectador" : "Volver a Espectador"}
-                  color="slate"
-                  subtitle={
-                    isSpectator ? "Modo actual" : "Liberar tu slot y salir"
-                  }
-                  disabled={false}
-                  active={isSpectator}
-                  onClick={handleBecomeSpectator}
-                />
-              </div>
-            )}
+                  <RoleOption
+                    id="role-opt-player2"
+                    icon={<Flame className="w-3.5 h-3.5" />}
+                    title="Jugador 2"
+                    color="rose"
+                    subtitle={
+                      isP2Me
+                        ? "Controlas este slot"
+                        : p2Occupied
+                        ? "Ocupado por otro"
+                        : "Disponible"
+                    }
+                    disabled={p2Occupied && !isP2Me}
+                    active={isP2Me}
+                    onClick={() => handleSelectRole("player2")}
+                  />
+
+                  <RoleOption
+                    id="role-opt-spectator"
+                    icon={
+                      isSpectator ? (
+                        <Eye className="w-3.5 h-3.5" />
+                      ) : (
+                        <LogOut className="w-3.5 h-3.5" />
+                      )
+                    }
+                    title={isSpectator ? "Espectador" : "Volver a Espectador"}
+                    color="slate"
+                    subtitle={
+                      isSpectator ? "Modo actual" : "Liberar tu slot y salir"
+                    }
+                    disabled={false}
+                    active={isSpectator}
+                    onClick={handleBecomeSpectator}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* BOTÓN SILENCIO / AUDIO */}
-          <button
+          {/* ─── BOTÓN SONIDO ────────────────────────────────────────── */}
+          <motion.button
             type="button"
             id="btn-sound"
-            name="btn-sound"
-            onClick={() => onToggleSound()}
+            onClick={onToggleSound}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             aria-label={soundMuted ? "Activar sonido" : "Silenciar sonido"}
             aria-pressed={!soundMuted}
-            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-yellow-400 rounded-xl border-2 border-black shadow-[2px_2px_0_#000] transition active:translate-y-0.5"
+            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-yellow-400 rounded-xl border-2 border-black shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 focus:ring-yellow-400"
             title={soundMuted ? "Activar Sonido" : "Silenciar"}
           >
             {soundMuted ? (
-              <VolumeX className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
+              <VolumeX className="w-3.5 h-3.5 text-slate-500" strokeWidth={2.5} aria-hidden="true" />
             ) : (
-              <Volume2 className="w-3.5 h-3.5 text-yellow-400" aria-hidden="true" />
+              <Volume2 className="w-3.5 h-3.5 text-yellow-400" strokeWidth={2.5} aria-hidden="true" />
             )}
-          </button>
+          </motion.button>
         </div>
       </div>
-    </header>
+    </motion.header>
+  );
+}
+
+// ============================================================================
+// SUB-COMPONENTE: NavButton
+// ============================================================================
+function NavButton({ id, icon: Icon, label, count, color, onClick, title, ariaLabel }) {
+  const palettes = {
+    yellow: {
+      container:
+        "border-yellow-500/80 bg-yellow-950/60 hover:bg-yellow-900/80 text-yellow-300 focus:ring-yellow-400",
+      icon: "text-yellow-400",
+      badge: "bg-yellow-400 text-black",
+    },
+    cyan: {
+      container:
+        "border-cyan-500/80 bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 focus:ring-cyan-400",
+      icon: "text-cyan-400",
+      badge: "bg-cyan-400 text-black",
+    },
+  }[color];
+
+  return (
+    <motion.button
+      type="button"
+      id={id}
+      onClick={onClick}
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border-2 shadow-[2px_2px_0_#000] transition focus:outline-none focus:ring-2 ${palettes.container}`}
+      title={title}
+      aria-label={ariaLabel}
+    >
+      <Icon className={`w-3.5 h-3.5 ${palettes.icon}`} strokeWidth={2.5} aria-hidden="true" />
+      <span className="font-['Press_Start_2P'] text-[9px] sm:text-[10px] flex items-center gap-1">
+        <span className="hidden sm:inline">{label}:</span>
+        <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded text-[9px] font-bold ${palettes.badge}`}>
+          {count}
+        </span>
+      </span>
+    </motion.button>
   );
 }
 
@@ -321,39 +406,50 @@ function RoleOption({ id, icon, title, subtitle, disabled, active, onClick, colo
       iconIdle: "text-cyan-300/70",
       bg: active ? "bg-cyan-950/60" : "hover:bg-cyan-950/30",
       border: active ? "border-l-cyan-400" : "border-l-transparent",
+      glow: active ? "shadow-[inset_0_0_20px_rgba(34,211,238,0.15)]" : "",
     },
     rose: {
       iconActive: "text-rose-400",
       iconIdle: "text-rose-300/70",
       bg: active ? "bg-rose-950/60" : "hover:bg-rose-950/30",
       border: active ? "border-l-rose-400" : "border-l-transparent",
+      glow: active ? "shadow-[inset_0_0_20px_rgba(244,63,94,0.15)]" : "",
     },
     slate: {
       iconActive: "text-slate-300",
       iconIdle: "text-slate-400",
       bg: active ? "bg-slate-800/60" : "hover:bg-slate-800/30",
       border: active ? "border-l-slate-400" : "border-l-transparent",
+      glow: "",
     },
   }[color];
 
   return (
-    <button
+    <motion.button
       type="button"
       id={id}
-      name={id}
       role="menuitem"
       disabled={disabled}
       aria-disabled={disabled}
       onClick={onClick}
-      className={`w-full px-3 py-2 flex items-center gap-2.5 text-left border-l-4 ${palette.border} ${palette.bg} transition disabled:opacity-40 disabled:cursor-not-allowed border-b border-slate-800 last:border-b-0`}
+      whileHover={!disabled ? { x: 4 } : {}}
+      className={`w-full px-3 py-2.5 flex items-center gap-2.5 text-left border-l-4 ${palette.border} ${palette.bg} ${palette.glow} transition disabled:opacity-40 disabled:cursor-not-allowed border-b border-slate-800 last:border-b-0 focus:outline-none focus:bg-slate-800/80`}
     >
       <span
         className={
-          disabled ? "text-slate-600" : active ? palette.iconActive : palette.iconIdle
+          disabled
+            ? "text-slate-600"
+            : active
+            ? palette.iconActive
+            : palette.iconIdle
         }
         aria-hidden="true"
       >
-        {disabled ? <Lock className="w-3.5 h-3.5" /> : icon}
+        {disabled ? (
+          <Lock className="w-3.5 h-3.5" strokeWidth={2.5} />
+        ) : (
+          icon
+        )}
       </span>
       <div className="flex-1 min-w-0">
         <div className="font-['Chakra_Petch'] font-bold text-xs text-white truncate">
@@ -364,10 +460,13 @@ function RoleOption({ id, icon, title, subtitle, disabled, active, onClick, colo
         </div>
       </div>
       {active && (
-        <span className="text-[10px] text-emerald-400" aria-hidden="true">
-          ●
-        </span>
+        <motion.span
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+          aria-hidden="true"
+        />
       )}
-    </button>
+    </motion.button>
   );
 }
